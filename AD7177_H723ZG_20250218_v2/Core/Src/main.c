@@ -85,6 +85,10 @@ volatile uint32_t tracker2 = 0;
 volatile uint32_t tracker3 = 0;
 volatile uint32_t tracker4 = 0;
 
+volatile uint32_t ticks1 = 0;
+volatile uint32_t ticks2 = 0;
+volatile uint32_t ticksdiff = 0;
+
 
 uint8_t setupADCMode[] = {
 		AD7177_COMM_WRITE | AD7177_REG_ADCMODE,
@@ -179,6 +183,7 @@ uint8_t initial_ch = 6;
 uint8_t eth_status = 1;
 
 uint8_t error_flag = 2;
+uint32_t last_timer = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -266,6 +271,8 @@ int main(void)
   initializeAD7177Board();
 
   readInitializedRegisters();
+
+
   /*
 
   spi_init_working = 13;
@@ -781,7 +788,7 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 //void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
-uint8_t AD7177_ReadIfReady(void)
+void AD7177_ReadIfReady(void)
 {
 
 	  // read the data register
@@ -812,7 +819,12 @@ uint8_t AD7177_ReadIfReady(void)
 				spiData[spiIndex + (i * 2) + 1] = (channel_data[i] >> 16) << 8 | i; // bits 23:16 + channel id
 			}
 
+
+
+
+
 			// Add timestamp
+			timer23val = __HAL_TIM_GET_COUNTER(&htim23);
 			spiData[spiIndex + 6]  = timer23val & 0xFFFF;
 			spiData[spiIndex + 7]  = (timer23val >> 16) & 0xFFFF;
 
@@ -828,14 +840,16 @@ uint8_t AD7177_ReadIfReady(void)
 			}
 			else if (spiIndex == 600) {
 				spiData[spiIndex] = sampleNum++;
-				spiIndex++;
-				sampleNum++;
+				spiIndex = 0;
 
-				return 1; // success
+				BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+				vTaskNotifyGiveFromISR(ethernetTaskHandle, &xHigherPriorityTaskWoken); // function will set xHigherPriorityTaskWoken to pdTRUE if the unblocked task (ethernetTaskHandle) has a higher priority than the currently running task. Also unblocks task
+				portYIELD_FROM_ISR(xHigherPriorityTaskWoken); // if xHigherPriorityTaskWoken is pdTURE, scheduler will switch to the ethernetTaskHandle task as soon as the ISR completes. Otherwise, currently running task will continue to run after ISR completes
+				//return 1; // success
 
 			}
 	}
-		return 0;
+		//return 0;
 }
 
 void AD7177_WriteRegister(uint8_t reg, uint32_t value, uint8_t num_bytes){
@@ -956,6 +970,9 @@ void StartDefaultTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
+	  timer23val = __HAL_TIM_GET_COUNTER(&htim23);
+	  AD7177_ReadIfReady(); // Sample and accumulate
+	  // Control polling rate
 	  // Try reading one sample from the ADC
 	   //AD7177_ReadIfReady(2);  // timeout of 2 ms
 
@@ -1024,13 +1041,20 @@ void startEthernetTask(void *argument)
 	// Start timer 2 with 1ms interrupts
 	HAL_TIM_Base_Start_IT(&htim2);
 
+	 ticks1 = __HAL_TIM_GET_COUNTER(&htim23);
+	  HAL_Delay(1000);  // wait 1 second
+	  ticks2 = __HAL_TIM_GET_COUNTER(&htim23);
+	  ticksdiff = ticks2 - ticks1;
+
+
 	for (;;)
 	{
-		bool ready_flag = AD7177_ReadIfReady();
+		//AD7177_ReadIfReady();
 		 // Wait for the notification to send data
 		//ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-		if(ready_flag){
+		// Wait for the notification to send data
+			  ulTaskNotifyTake(pdTRUE, portMAX_DELAY);;
 
 			  // Copy samples from spiData to tempBuffer
 			  memcpy(tempBuffer, spiData, sizeof(tempBuffer));
@@ -1050,8 +1074,7 @@ void startEthernetTask(void *argument)
 			  // Update spiIndex to reflect the new starting position
 			  spiIndex -= 601;
 
-		}
-		osDelay(1);
+				//osDelay(1);
 	}
 	
 

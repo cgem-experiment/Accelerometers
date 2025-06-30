@@ -75,8 +75,8 @@ all: main-build
 main-build: AD7177_H723ZG_20250612_v2.elf secondary-outputs
 
 # Tool invocations
-AD7177_H723ZG_20250612_v2.elf AD7177_H723ZG_20250612_v2.map: $(OBJS) $(USER_OBJS) C:\Users\natal\inclinometers\AD7738_H723ZG_20250218_v2\STM32H723ZGTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "AD7177_H723ZG_20250612_v2.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m7 -T"C:\Users\natal\inclinometers\AD7738_H723ZG_20250218_v2\STM32H723ZGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="AD7177_H723ZG_20250612_v2.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+AD7177_H723ZG_20250612_v2.elf AD7177_H723ZG_20250612_v2.map: $(OBJS) $(USER_OBJS) C:\Users\natal\2025_Accelerometer\Accelerometers\AD7177_H723ZG_20250218_v2\STM32H723ZGTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "AD7177_H723ZG_20250612_v2.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m7 -T"C:\Users\natal\2025_Accelerometer\Accelerometers\AD7177_H723ZG_20250218_v2\STM32H723ZGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="AD7177_H723ZG_20250612_v2.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

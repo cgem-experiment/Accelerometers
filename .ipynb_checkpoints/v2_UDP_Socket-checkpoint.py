@@ -7,7 +7,7 @@ import os
 
 NUM_PACKETS_PER_FILE = 26400 # Number of packets to write to each file
 NUM_FILES = -1  # Set to -1 for infinite, or specify the number of files 
-BASE_PATH = r"C:\Users\natal\June_2025_Accelerometer"  # Change this variable to set the base directory
+BASE_PATH = r"C:\Users\natal\Accelerometer_data"  # Change this variable to set the base directory
 
 # Configuration
 UDP_IP = "10.20.3.3"
@@ -37,12 +37,9 @@ ip_family = socket.AF_INET  # AF_INET is for ipv4
 sock = socket.socket(ip_family, protocol)
 
 # Bind to the specific IP and port
-#sock.bind((LISTEN_IP, LISTEN_PORT)) # Can try using sock.bind(("0.0.0.0", LISTEN_PORT)) instead if having problems
-#sock.bind(("0.0.0.0", LISTEN_PORT))
-
 try:
     sock.bind((LISTEN_IP, LISTEN_PORT))
-    print(" Bind successful. Listening for data...")
+    print(" Bind successful. Listening for data...") # Can try using sock.bind(("0.0.0.0", LISTEN_PORT)) instead if having problems
 except OSError as e:
     print(f" Bind failed: {e}")
 
@@ -69,8 +66,9 @@ def process_payload(payload):
     time_array = []
     
     for i, sample_hex in enumerate(samples_hex):
+        print(len(sample_hex))
         if len(sample_hex) < 32:
-            if i != 40:
+            if i != 60:
                 print(f"Warning: Skipping invalid sample at index {i}: {sample_hex} with surrounding {samples_hex[i-5:i+5]} and payload {payload_hex[i*16+i*4-50:i+i*16*4+50]}")
             continue
     
@@ -86,7 +84,7 @@ def process_payload(payload):
             value2 = int(sample_hex[22:24] + sample_hex[18:20] + sample_hex[16:18], 16)
             status2 = int(sample_hex[20:22])
             
-            time_32bit = int(sample_hex[28:30] + sample_hex[26:28] + sample_hex[24:26] + sample_hex[22:24], 16) #24-32
+            time_32bit = int(sample_hex[40:32] + sample_hex[28:30] + sample_hex[26:28] + sample_hex[24:26], 16) #24-32
             
             value0_array.append(value0)
             value1_array.append(value1)
@@ -124,7 +122,7 @@ try:
             data, addr = sock.recvfrom(PACKET_SIZE)
         except socket.timeout:
             print("No data received within 2 seconds.")
-        data, addr = sock.recvfrom(PACKET_SIZE)  # Receive packet
+        #data, addr = sock.recvfrom(PACKET_SIZE)  # Receive packet
          #os.delay(1000)
         print(data, addr)
         if addr[0] == UDP_IP and addr[1] == UDP_PORT:
