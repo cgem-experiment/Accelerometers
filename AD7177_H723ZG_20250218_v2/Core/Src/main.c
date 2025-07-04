@@ -402,7 +402,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
   hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -720,7 +720,6 @@ static void MX_GPIO_Init(void)
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
-  //HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   //remove HAL_NVIC_EnableIRQ above
@@ -935,7 +934,6 @@ float convertDataToVoltage(uint32_t data){
 void StartDefaultTask(void *argument)
 {
   /* init code for LWIP */
-  //MX_LWIP_Init();
   /* USER CODE BEGIN 5 */
 	// MAKE SURE TO DELETE ANY "MX_LWIP_Init()" ABOVE
   /* Infinite loop */
@@ -954,14 +952,9 @@ void StartDefaultTask(void *argument)
 * @retval None
 */
 /* USER CODE END Header_startEthernetTask */
-/*
 void startEthernetTask(void *argument)
 {
   /* USER CODE BEGIN startEthernetTask */
-
-void startEthernetTask(void *argument)
-{
- /* USER CODE BEGIN startEthernetTask */
 	MX_LWIP_Init();
 	osDelay(100); // let LWIP be initialized
 	extern struct netif gnetif;
@@ -1026,9 +1019,8 @@ void startEthernetTask(void *argument)
 
 					osDelay(1);
 	}
-}
-
   /* USER CODE END startEthernetTask */
+}
 
  /* MPU Configuration */
 

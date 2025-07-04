@@ -37,11 +37,11 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, READONLY, DEBUGGING, OCTETS
  16 .debug_macro  00012d27  00000000  00000000  00066319  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 17 .debug_line   0003d8f2  00000000  00000000  00079040  2**0
+ 17 .debug_line   0003d8f0  00000000  00000000  00079040  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 18 .debug_str    00171ecb  00000000  00000000  000b6932  2**0
+ 18 .debug_str    00171ecb  00000000  00000000  000b6930  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 19 .comment      00000043  00000000  00000000  002287fd  2**0
+ 19 .comment      00000043  00000000  00000000  002287fb  2**0
                   CONTENTS, READONLY
  20 .debug_frame  0000ae44  00000000  00000000  00228840  2**2
                   CONTENTS, READONLY, DEBUGGING, OCTETS
@@ -652,9 +652,9 @@ static void MX_SPI1_Init(void)
  800066a:	4b1e      	ldr	r3, [pc, #120]	@ (80006e4 <MX_SPI1_Init+0xa8>)
  800066c:	f04f 6280 	mov.w	r2, #67108864	@ 0x4000000
  8000670:	619a      	str	r2, [r3, #24]
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
  8000672:	4b1c      	ldr	r3, [pc, #112]	@ (80006e4 <MX_SPI1_Init+0xa8>)
- 8000674:	f04f 42a0 	mov.w	r2, #1342177280	@ 0x50000000
+ 8000674:	f04f 5280 	mov.w	r2, #268435456	@ 0x10000000
  8000678:	61da      	str	r2, [r3, #28]
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
  800067a:	4b1a      	ldr	r3, [pc, #104]	@ (80006e4 <MX_SPI1_Init+0xa8>)
@@ -1550,7 +1550,6 @@ static void MX_GPIO_Init(void)
  8000bf6:	2105      	movs	r1, #5
  8000bf8:	2017      	movs	r0, #23
  8000bfa:	f001 fb33 	bl	8002264 <HAL_NVIC_SetPriority>
-  //HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   //remove HAL_NVIC_EnableIRQ above
@@ -2421,17 +2420,17 @@ void StartDefaultTask(void *argument)
  800121e:	e7fb      	b.n	8001218 <StartDefaultTask+0x8>
 
 08001220 <startEthernetTask>:
-void startEthernetTask(void *argument)
-{
-  /* USER CODE BEGIN startEthernetTask */
-
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_startEthernetTask */
 void startEthernetTask(void *argument)
 {
  8001220:	b580      	push	{r7, lr}
  8001222:	b0a4      	sub	sp, #144	@ 0x90
  8001224:	af00      	add	r7, sp, #0
  8001226:	6078      	str	r0, [r7, #4]
- /* USER CODE BEGIN startEthernetTask */
+  /* USER CODE BEGIN startEthernetTask */
 	MX_LWIP_Init();
  8001228:	f00a fb5a 	bl	800b8e0 <MX_LWIP_Init>
 	osDelay(100); // let LWIP be initialized
@@ -2611,7 +2610,7 @@ void startEthernetTask(void *argument)
  800137c:	24005876 	.word	0x24005876
 
 08001380 <MPU_Config>:
-  /* USER CODE END startEthernetTask */
+}
 
  /* MPU Configuration */
 
