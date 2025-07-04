@@ -72,6 +72,7 @@
 
 //IF Mode
 #define AD7177_IFMODE			  0x0040
+#define AD7177_CONT_READ		  0x00C0
 
 //to avoid hardcoding stuff
 #define NUM_CH_ENABLED 			  3
