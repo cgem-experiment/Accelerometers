@@ -81,93 +81,15 @@ uint8_t rxBuffer24bit[5];
 volatile uint16_t spiIndex = 0;
 volatile uint32_t sampleNum = 0;
 
-
-
-uint8_t setupCon0[] = {
-		AD7177_COMM_WRITE | AD7177_REG_SETUPCON0,
-		(uint8_t)(AD7177_SETUPCON0 >> 8) & 0xFF, (uint8_t)(AD7177_SETUPCON0 & 0xFF)
-};
-
-uint8_t filtCon0[] = {
-		AD7177_COMM_WRITE | AD7177_REG_FILTCON0,
-		(uint8_t)(AD7177_FILTCON0 >> 8) & 0xFF, (uint8_t)(AD7177_FILTCON0 & 0xFF)
-};
-
-uint8_t setupGPIO[] = {
-		AD7177_COMM_WRITE | AD7177_REG_GPIOCON,
-		(uint8_t)(AD7177_GPIO >> 8) & 0xFF, (uint8_t)(AD7177_GPIO & 0xFF),
-};
-
-uint8_t setupChannels[] = {
-
-		// CH0: AIN0 - AIN4
-		AD7177_COMM_WRITE | AD7177_REG_CH0,
-		(uint8_t)(AD7177_CH0_SETUP0 >> 8) & 0xFF, (uint8_t)(AD7177_CH0_SETUP0 & 0xFF),
-
-		// CH1: AIN1 - AIN4
-		AD7177_COMM_WRITE | AD7177_REG_CH1,
-		(uint8_t)(AD7177_CH1_SETUP0 >> 8) & 0xFF, (uint8_t)(AD7177_CH1_SETUP0 & 0xFF),
-
-		// CH2: AIN2 - AIN4
-		AD7177_COMM_WRITE | AD7177_REG_CH2,
-		(uint8_t)(AD7177_CH2_SETUP0 >> 8) & 0xFF, (uint8_t)(AD7177_CH2_SETUP0 & 0xFF),
-
-		// CH3: AIN3 - AIN4
-		AD7177_COMM_WRITE | AD7177_REG_CH3,
-		(uint8_t)(AD7177_CH3_SETUP0 >> 8) & 0xFF, (uint8_t)(AD7177_CH3_SETUP0 & 0xFF),
-
-};
-
-
 volatile uint32_t channel_data[4] = {0};      // Holds raw ADC values
 volatile uint8_t  channel_ready[4] = {0};     // Flags to know when each channel has been updated
 
 volatile uint32_t timer23val;
 
-
-volatile uint8_t line_950 = 1;
-
-volatile uint32_t test_spi = 99;
-volatile uint32_t test_spi_2 = 99;
-volatile uint32_t test_status = 99;
-volatile uint8_t spi_init_working = 9;
-
-volatile uint8_t got_notified = 2;
-
 uint8_t resetSequence[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 uint8_t checkTransmit[1] = {0x47};
 uint8_t checkReceive[2] = {0x00, 0x00};
-
-/* for debugging */
-uint32_t check_id = 3;
-uint8_t check_status = 2;
-
-uint32_t adc_mode = 1;
-uint32_t if_mode = 1;
-
-uint32_t filtcon0 = 1;
-uint32_t setupcon0 = 1;
-
-uint32_t ch0_setup = 1;
-uint32_t ch1_setup = 1;
-uint32_t ch2_setup = 1;
-uint32_t ch3_setup = 1;
-
-uint32_t initial_data = 1;
-float initial_voltage = 4.41;
-uint8_t initial_ch = 6;
-
-uint8_t eth_status = 1;
-
-uint8_t error_flag = 2;
-uint32_t last_timer = 0;
-
-uint32_t exti_callback = 0;
-uint32_t spi_callback = 0;
-uint32_t eth_count = 0;
-uint32_t raw2 = 0;
-uint32_t ch = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -188,8 +110,6 @@ void startEthernetTask(void *argument);
 uint32_t AD7177_ReadRegister(uint8_t reg, uint8_t num_bytes);
 void AD7177_WriteRegister(uint8_t reg, uint32_t value, uint8_t num_bytes);
 void initializeAD7177Board();
-void readInitializedRegisters();
-float convertDataToVoltage(uint32_t data);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -735,7 +655,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     if(GPIO_Pin == GPIO_PIN_8) // If The INT Source Is EXTI Line8 (PB8 Pin)
     {
-      exti_callback++;
       // Disable EXTI to prevent re-entry during SPI
       HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
 
@@ -753,8 +672,8 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
   {
 	  // Deselect CS
 	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+	  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn); //re-enable interrupts
 
-	  spi_callback++;
 	  uint32_t value_24Bit =
 	              (rxBuffer24bit[1] << 16) |
 	              (rxBuffer24bit[2] << 8) |
@@ -767,9 +686,10 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 	  		bool crc_error  =  (status & 0x20);   // Bit 5: 1 = CRC error
 	  		uint8_t channel_id = status & 0x0F;   // Bits 3:0 = Channel ID
 
+	  		/* Check that the data is fresh and without error */
 	  		if (rdy && !adc_error && !crc_error && channel_id < NUM_CH_ENABLED) {
 	  			channel_data[channel_id] = value_24Bit;
-	  			channel_ready[channel_id] = 1;
+	  			channel_ready[channel_id] = 1; //set that channel's ready flag high (this is different from rdy)
 	  		}
 
 	  		// Once all 4 channels have been read, build and store packet
@@ -806,13 +726,8 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 	  				BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	  				vTaskNotifyGiveFromISR(ethernetTaskHandle, &xHigherPriorityTaskWoken); // function will set xHigherPriorityTaskWoken to pdTRUE if the unblocked task (ethernetTaskHandle) has a higher priority than the currently running task. Also unblocks task
 	  				portYIELD_FROM_ISR(xHigherPriorityTaskWoken); // if xHigherPriorityTaskWoken is pdTURE, scheduler will switch to the ethernetTaskHandle task as soon as the ISR completes. Otherwise, currently running task will continue to run after ISR completes
-	  				//return 1; // success
-
-
 	  			}
-
 	  		}
-	  		HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
   }
 }
 void AD7177_WriteRegister(uint8_t reg, uint32_t value, uint8_t num_bytes){
@@ -829,9 +744,7 @@ void AD7177_WriteRegister(uint8_t reg, uint32_t value, uint8_t num_bytes){
         tx[1] = value & 0xFF;
     }
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
-    //HAL_Delay(1);
     HAL_SPI_Transmit(&hspi1, tx, num_bytes + 1, HAL_MAX_DELAY);
-    //HAL_Delay(1);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
 }
 
@@ -841,9 +754,7 @@ uint32_t AD7177_ReadRegister(uint8_t reg, uint8_t num_bytes)
     uint8_t tx[4] = { cmd, 0, 0, 0 };
     uint8_t rx[4] = {0};
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
-    //HAL_Delay(1);
     HAL_SPI_TransmitReceive(&hspi1, tx, rx, num_bytes + 1, 50);
-    //HAL_Delay(1);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
     uint32_t result = 0;
     for (int i = 0; i < num_bytes; ++i) {
@@ -875,7 +786,7 @@ void initializeAD7177Board() {
     // set up ADC Mode
     AD7177_WriteRegister(AD7177_REG_ADCMODE, AD7177_ADCMODE, 2);
 
-    // set up IF Mode, enable DATA_STAT byte and continuous read mode
+    // set up IF Mode, enable DATA_STAT byte, and continuous conversion mode
     AD7177_WriteRegister(AD7177_REG_IFMODE, AD7177_IFMODE, 2);
 
     // Configure filter mode 0
@@ -888,39 +799,7 @@ void initializeAD7177Board() {
     AD7177_WriteRegister(AD7177_REG_CH0, AD7177_CH0_SETUP0, 2);
     AD7177_WriteRegister(AD7177_REG_CH1, AD7177_CH1_SETUP0, 2);
     AD7177_WriteRegister(AD7177_REG_CH2, AD7177_CH2_SETUP0, 2);
-
-    // read channel 2
-    ch = AD7177_ReadRegister(AD7177_REG_CH0, 2);
-
 }
-void readInitializedRegisters() {
-	adc_mode = AD7177_ReadRegister(AD7177_REG_ADCMODE, 2);
-	if_mode = AD7177_ReadRegister(AD7177_REG_IFMODE, 2);
-	filtcon0 = AD7177_ReadRegister(AD7177_REG_FILTCON0, 2);
-	setupcon0 = AD7177_ReadRegister(AD7177_REG_SETUPCON0, 2);
-
-	ch0_setup = AD7177_ReadRegister(AD7177_REG_CH0, 2);
-	ch1_setup = AD7177_ReadRegister(AD7177_REG_CH1, 2);
-	ch2_setup = AD7177_ReadRegister(AD7177_REG_CH2, 2);
-	ch3_setup = AD7177_ReadRegister(AD7177_REG_CH3, 2);
-
-	initial_data = AD7177_ReadRegister(AD7177_REG_DATA, 4);
-	initial_voltage = convertDataToVoltage(initial_data);
-
-	initial_ch = initial_data & 0x03;
-}
-
-float convertDataToVoltage(uint32_t data){
-	//read the first 24 bits:
-	uint32_t first24 = data >> 8;
-
-	float voltage = (((float)first24 / ((1 << 24) - 1)) * 10) - 5;
-
-	return voltage;
-}
-
-
-
 
 /* USER CODE END 4 */
 
@@ -939,8 +818,7 @@ void StartDefaultTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-
-    osDelay(1);
+	  vTaskDelete(NULL); //deletes task
   }
   /* USER CODE END 5 */
 }
@@ -957,22 +835,11 @@ void startEthernetTask(void *argument)
   /* USER CODE BEGIN startEthernetTask */
 	MX_LWIP_Init();
 	osDelay(100); // let LWIP be initialized
+
 	extern struct netif gnetif;
 	netif_set_up(&gnetif);
 	netif_set_link_up(&gnetif); // Forces link status if not auto-detected
-	const char* ip_status;
-	ip_status = ipaddr_ntoa(&gnetif.ip_addr);
-	ETH_MACConfigTypeDef mac_config;
-	HAL_ETH_GetMACConfig(&heth, &mac_config);
-	volatile uint32_t eth_speed = mac_config.Speed;         // Should be ETH_SPEED_100M
-	volatile uint32_t eth_duplex = mac_config.DuplexMode;   // Should be ETH_FULLDUPLEX_MODE
-	extern ETH_HandleTypeDef heth;
-	HAL_StatusTypeDef eth_status = HAL_ETH_Start(&heth);
-	if (eth_status != HAL_OK)
-	{
-	    // Set a debug flag so we know it failed
-	    volatile int eth_failed = 1;
-	}
+
 	// Own IP
 	ip_addr_t myIPaddr;
 	IP_ADDR4(&myIPaddr, 10, 20, 3, 3);
@@ -980,9 +847,11 @@ void startEthernetTask(void *argument)
 	ip_addr_t PC_IPADDR;
 	IP_ADDR4(&PC_IPADDR, 10, 20, 1, 3);
 	struct udp_pcb* my_udp = udp_new();
+
 	udp_bind(my_udp, &myIPaddr, 8);
 	udp_connect(my_udp, &PC_IPADDR, 12345);
 	struct pbuf* udp_buffer = NULL;
+
 	// Start timer 23
 	HAL_TIM_Base_Start(&htim23);
 	// Start timer 1
@@ -992,32 +861,30 @@ void startEthernetTask(void *argument)
 
 	initializeAD7177Board();
 
-	readInitializedRegisters();
-
 	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 	for (;;)
 	{
 		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
 		// Copy samples from spiData to tempBuffer
-					  memcpy(tempBuffer, spiData, sizeof(tempBuffer));
+		memcpy(tempBuffer, spiData, sizeof(tempBuffer));
 
-					  // Send the data over Ethernet
-					  udp_buffer = pbuf_alloc(PBUF_TRANSPORT, sizeof(tempBuffer), PBUF_RAM);
-					  if (udp_buffer != NULL)
-					  {
-						  memcpy(udp_buffer->payload, tempBuffer, sizeof(tempBuffer));
-						  udp_send(my_udp, udp_buffer);
-						  pbuf_free(udp_buffer);
-					  }
+		// Send the data over Ethernet
+		udp_buffer = pbuf_alloc(PBUF_TRANSPORT, sizeof(tempBuffer), PBUF_RAM);
+		if (udp_buffer != NULL)
+		{
+			memcpy(udp_buffer->payload, tempBuffer, sizeof(tempBuffer));
+			udp_send(my_udp, udp_buffer);
+			pbuf_free(udp_buffer);
+		}
 
-					  // Shift the remaining samples up in the spiData buffer (pointer to dest, pointer to source, number of bytes)
-					  memmove(spiData, &spiData[601], sizeof(spiData) - sizeof(tempBuffer));
+		// Shift the remaining samples up in the spiData buffer (pointer to dest, pointer to source, number of bytes)
+		memmove(spiData, &spiData[601], sizeof(spiData) - sizeof(tempBuffer));
 
-					  // Update spiIndex to reflect the new starting position
-					  spiIndex -= 601;
+		// Update spiIndex to reflect the new starting position
+		spiIndex -= 601;
 
-					osDelay(1);
+		osDelay(1);
 	}
   /* USER CODE END startEthernetTask */
 }
