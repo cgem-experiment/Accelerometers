@@ -65,7 +65,7 @@
 #define AD7177_GPIO				  0x0020
 
 //Filter Configuration
-#define AD7177_FILTCON0			  0x0009 //2500 sps is 0x0009
+#define AD7177_FILTCON0			  0x0009
 
 //ADC Mode
 #define AD7177_ADCMODE		  	  0x8000

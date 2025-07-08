@@ -342,8 +342,6 @@ static void MX_SPI1_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN SPI1_Init 2 */
-  //HAL_NVIC_EnableIRQ(SPI1_IRQn);
-//
   /* USER CODE END SPI1_Init 2 */
 
 }
