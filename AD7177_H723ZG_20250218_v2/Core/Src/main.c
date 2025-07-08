@@ -655,24 +655,77 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     if(GPIO_Pin == GPIO_PIN_8) // If The INT Source Is EXTI Line8 (PB8 Pin)
     {
-      // Disable EXTI to prevent re-entry during SPI
-      HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
 
       uint8_t txBuffer24bit[5] = {AD7177_READ_DATA_REG, 0x00, 0x00, 0x00, 0x00};
-
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
 	  HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t *)txBuffer24bit, (uint8_t *)rxBuffer24bit, 5);
 	  timer23val = __HAL_TIM_GET_COUNTER(&htim23);
     }
 }
-
+/*
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
   if (hspi->Instance == SPI1)
   {
 	  // Deselect CS
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
-	  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn); //re-enable interrupts
+	  //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+	  //HAL_NVIC_EnableIRQ(EXTI9_5_IRQn); //re-enable interrupts
+
+	  uint32_t value_24Bit =
+	              (rxBuffer24bit[1] << 16) |
+	              (rxBuffer24bit[2] << 8) |
+	               rxBuffer24bit[3];
+
+	  uint8_t  status       = rxBuffer24bit[4];              // Bottom byte = status
+
+	  		bool rdy        = !(status & 0x80);   // Bit 7: 0 = data ready
+	  		bool adc_error  =  (status & 0x40);   // Bit 6: 1 = ADC error
+	  		bool crc_error  =  (status & 0x20);   // Bit 5: 1 = CRC error
+	  		uint8_t channel_id = status & 0x0F;   // Bits 3:0 = Channel ID
+
+
+	  		// Check that the data is fresh and without error
+	  		//if (rdy && !adc_error && !crc_error && channel_id < NUM_CH_ENABLED) //&& (last_channel != channel_id))
+	  		//{
+	  			channel_data[channel_id] = value_24Bit;
+
+	  			last_channel = channel_id;
+
+	  		// build and store packet
+
+	  		// add channel data and id
+	  		spiData[spiIndex]     = value_24Bit & 0xFFFF; // bits 15:0
+	  		spiData[spiIndex + 1] = (value_24Bit >> 16) << 8 | channel_id; // bits 23:16 + channel id
+
+	  		// Add timestamp
+	  		spiData[spiIndex + 2]  = timer23val & 0xFFFF;
+	  		spiData[spiIndex + 3]  = (timer23val >> 16) & 0xFFFF;
+
+	  		//spacers (may change this later)
+	  		spiData[spiIndex + 4] = 0xAB89;
+	  		spiData[spiIndex + 5] = 0xEFCD;
+
+	  		// Advance index
+	  		spiIndex += 6;
+
+	  		if (spiIndex >= 700) {
+	  			spiIndex = 0;
+	  		}
+	  		else if (spiIndex == 600) {
+	  			spiData[spiIndex] = sampleNum++;
+	  			spiIndex = 0;
+
+	  			BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	  			vTaskNotifyGiveFromISR(ethernetTaskHandle, &xHigherPriorityTaskWoken); // function will set xHigherPriorityTaskWoken to pdTRUE if the unblocked task (ethernetTaskHandle) has a higher priority than the currently running task. Also unblocks task
+	  			portYIELD_FROM_ISR(xHigherPriorityTaskWoken); // if xHigherPriorityTaskWoken is pdTURE, scheduler will switch to the ethernetTaskHandle task as soon as the ISR completes. Otherwise, currently running task will continue to run after ISR completes
+	  		}
+	  	}
+  //}
+}
+*/
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+  if (hspi->Instance == SPI1)
+  {
 
 	  uint32_t value_24Bit =
 	              (rxBuffer24bit[1] << 16) |
@@ -730,6 +783,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 	  		}
   }
 }
+
 void AD7177_WriteRegister(uint8_t reg, uint32_t value, uint8_t num_bytes){
     uint8_t cmd = (reg & 0x3F);
     uint8_t tx[4] = { cmd, 0, 0, 0 };
@@ -860,6 +914,8 @@ void startEthernetTask(void *argument)
 	HAL_TIM_Base_Start_IT(&htim2);
 
 	initializeAD7177Board();
+
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
 
 	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 	for (;;)
