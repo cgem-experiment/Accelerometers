@@ -51,8 +51,7 @@
 #define AD7177_COMM_READ          0b01000000 // Read Operation (at channel 0 register)
 
 //setup configuration for all channels
-#define AD7177_SETUPCON0          0x1020
-
+#define AD7177_SETUPCON0          0x1300 //bipolar, internal reference disabled, AIN+ and AIN- buffers enabled
 #define AD7177_READ_DATA_REG	  0x44
 
 //channel setups
@@ -68,7 +67,7 @@
 #define AD7177_FILTCON0			  0x0009
 
 //ADC Mode
-#define AD7177_ADCMODE		  	  0x8000
+#define AD7177_ADCMODE		  	  0x0000 //had this on 0x8000 to enable 2.5 V reference
 
 //IF Mode
 #define AD7177_IFMODE			  0x0040
