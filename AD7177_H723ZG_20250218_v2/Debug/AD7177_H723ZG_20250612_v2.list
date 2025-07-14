@@ -2096,7 +2096,7 @@ void initializeAD7177Board() {
     // Configure setup mode 0
     AD7177_WriteRegister(AD7177_REG_SETUPCON0, AD7177_SETUPCON0, 2);
  8000fa8:	2202      	movs	r2, #2
- 8000faa:	f44f 51f9 	mov.w	r1, #7968	@ 0x1f20
+ 8000faa:	f44f 6172 	mov.w	r1, #3872	@ 0xf20
  8000fae:	2020      	movs	r0, #32
  8000fb0:	f7ff ff6a 	bl	8000e88 <AD7177_WriteRegister>
 
