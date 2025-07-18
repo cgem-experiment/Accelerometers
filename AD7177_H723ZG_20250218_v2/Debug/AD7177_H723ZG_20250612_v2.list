@@ -2075,50 +2075,51 @@ void initializeAD7177Board() {
     // set up ADC Mode
     AD7177_WriteRegister(AD7177_REG_ADCMODE, AD7177_ADCMODE, 2);
  8000f88:	2202      	movs	r2, #2
- 8000f8a:	f44f 4100 	mov.w	r1, #32768	@ 0x8000
- 8000f8e:	2001      	movs	r0, #1
- 8000f90:	f7ff ff7a 	bl	8000e88 <AD7177_WriteRegister>
+ 8000f8a:	2100      	movs	r1, #0
+ 8000f8c:	2001      	movs	r0, #1
+ 8000f8e:	f7ff ff7b 	bl	8000e88 <AD7177_WriteRegister>
 
     // set up IF Mode, enable DATA_STAT byte, and continuous conversion mode
     AD7177_WriteRegister(AD7177_REG_IFMODE, AD7177_IFMODE, 2);
- 8000f94:	2202      	movs	r2, #2
- 8000f96:	2140      	movs	r1, #64	@ 0x40
- 8000f98:	2002      	movs	r0, #2
- 8000f9a:	f7ff ff75 	bl	8000e88 <AD7177_WriteRegister>
+ 8000f92:	2202      	movs	r2, #2
+ 8000f94:	2140      	movs	r1, #64	@ 0x40
+ 8000f96:	2002      	movs	r0, #2
+ 8000f98:	f7ff ff76 	bl	8000e88 <AD7177_WriteRegister>
 
     // Configure filter mode 0
     AD7177_WriteRegister(AD7177_REG_FILTCON0, AD7177_FILTCON0, 2);
- 8000f9e:	2202      	movs	r2, #2
- 8000fa0:	2109      	movs	r1, #9
- 8000fa2:	2028      	movs	r0, #40	@ 0x28
- 8000fa4:	f7ff ff70 	bl	8000e88 <AD7177_WriteRegister>
+ 8000f9c:	2202      	movs	r2, #2
+ 8000f9e:	2109      	movs	r1, #9
+ 8000fa0:	2028      	movs	r0, #40	@ 0x28
+ 8000fa2:	f7ff ff71 	bl	8000e88 <AD7177_WriteRegister>
 
     // Configure setup mode 0
     AD7177_WriteRegister(AD7177_REG_SETUPCON0, AD7177_SETUPCON0, 2);
- 8000fa8:	2202      	movs	r2, #2
- 8000faa:	f44f 6172 	mov.w	r1, #3872	@ 0xf20
- 8000fae:	2020      	movs	r0, #32
- 8000fb0:	f7ff ff6a 	bl	8000e88 <AD7177_WriteRegister>
+ 8000fa6:	2202      	movs	r2, #2
+ 8000fa8:	f44f 6170 	mov.w	r1, #3840	@ 0xf00
+ 8000fac:	2020      	movs	r0, #32
+ 8000fae:	f7ff ff6b 	bl	8000e88 <AD7177_WriteRegister>
 
     // Setup channels 0 to 2
     AD7177_WriteRegister(AD7177_REG_CH0, AD7177_CH0_SETUP0, 2);
- 8000fb4:	2202      	movs	r2, #2
- 8000fb6:	f248 0104 	movw	r1, #32772	@ 0x8004
- 8000fba:	2010      	movs	r0, #16
- 8000fbc:	f7ff ff64 	bl	8000e88 <AD7177_WriteRegister>
+ 8000fb2:	2202      	movs	r2, #2
+ 8000fb4:	f248 0104 	movw	r1, #32772	@ 0x8004
+ 8000fb8:	2010      	movs	r0, #16
+ 8000fba:	f7ff ff65 	bl	8000e88 <AD7177_WriteRegister>
     AD7177_WriteRegister(AD7177_REG_CH1, AD7177_CH1_SETUP0, 2);
- 8000fc0:	2202      	movs	r2, #2
- 8000fc2:	f248 0124 	movw	r1, #32804	@ 0x8024
- 8000fc6:	2011      	movs	r0, #17
- 8000fc8:	f7ff ff5e 	bl	8000e88 <AD7177_WriteRegister>
+ 8000fbe:	2202      	movs	r2, #2
+ 8000fc0:	f248 0124 	movw	r1, #32804	@ 0x8024
+ 8000fc4:	2011      	movs	r0, #17
+ 8000fc6:	f7ff ff5f 	bl	8000e88 <AD7177_WriteRegister>
     AD7177_WriteRegister(AD7177_REG_CH2, AD7177_CH2_SETUP0, 2);
- 8000fcc:	2202      	movs	r2, #2
- 8000fce:	f248 0144 	movw	r1, #32836	@ 0x8044
- 8000fd2:	2012      	movs	r0, #18
- 8000fd4:	f7ff ff58 	bl	8000e88 <AD7177_WriteRegister>
+ 8000fca:	2202      	movs	r2, #2
+ 8000fcc:	f248 0144 	movw	r1, #32836	@ 0x8044
+ 8000fd0:	2012      	movs	r0, #18
+ 8000fd2:	f7ff ff59 	bl	8000e88 <AD7177_WriteRegister>
 }
- 8000fd8:	bf00      	nop
- 8000fda:	bd80      	pop	{r7, pc}
+ 8000fd6:	bf00      	nop
+ 8000fd8:	bd80      	pop	{r7, pc}
+ 8000fda:	bf00      	nop
  8000fdc:	58020400 	.word	0x58020400
  8000fe0:	24004984 	.word	0x24004984
  8000fe4:	24004a3c 	.word	0x24004a3c

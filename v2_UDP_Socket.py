@@ -16,6 +16,11 @@ LISTEN_IP = "10.20.1.3"
 LISTEN_PORT = 12345 #55151 #CHANGE IF ON SITE
 PACKET_SIZE = 601*2 + 42  # 600 bytes of data + 42 bytes UDP header
 
+metadata_filename = os.path.join(BASE_PATH, "metadata_log.txt")
+
+# Prompt the user for a note at the start
+session_note = input("Notes: ")
+
 # Take timestamp and define function for filenames
 timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
 def generate_filename(file_idx):
@@ -26,10 +31,17 @@ folder_name = f"{timestamp}_cgem_accel"
 full_path = os.path.join(BASE_PATH, folder_name)
 os.makedirs(full_path, exist_ok=True)  # Create folder if it doesn't exist
 
+
 # Initial filename, file and packet index
 packet_idx = 0
 file_idx = 1
 filename = os.path.join(full_path, generate_filename(file_idx))
+
+# Initialize the metadata log
+with open(metadata_filename, "a") as meta_file:
+    meta_file.write(f"folder path: {full_path}\n")
+    meta_file.write(f"initial file path: {filename}\n")
+    meta_file.write(f"Session note: {session_note}\n\n")
 
 # Configure ethernet socket
 protocol = socket.SOCK_DGRAM  # SOCK_DGRAM is for UDP
