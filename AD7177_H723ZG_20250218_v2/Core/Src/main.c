@@ -87,6 +87,8 @@ volatile uint8_t  channel_ready[4] = {0};     // Flags to know when each channel
 volatile uint32_t timer23val;
 
 uint8_t resetSequence[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+uint8_t packet_ready = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -659,7 +661,6 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
   if (hspi->Instance == SPI1)
   {
-
 	  uint32_t value_24Bit =
 	              (rxBuffer24bit[1] << 16) |
 	              (rxBuffer24bit[2] << 8) |
@@ -705,8 +706,9 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 	  				spiIndex = 0;
 	  			}
 	  			else if (spiIndex == 600) { // packet is ready
-	  				spiData[spiIndex] = sampleNum++;
-	  				spiIndex = 0;
+	  				spiData[spiIndex] = sampleNum;
+	  				sampleNum++;
+	  				spiIndex++;
 
 	  				BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	  				vTaskNotifyGiveFromISR(ethernetTaskHandle, &xHigherPriorityTaskWoken); // function will set xHigherPriorityTaskWoken to pdTRUE if the unblocked task (ethernetTaskHandle) has a higher priority than the currently running task. Also unblocks task
