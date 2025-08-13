@@ -32,7 +32,8 @@ Below are the main system hardware components. There is also a doclib entry cont
 - Accelerometer breakout board: [EVAL-ADXL354BZ](https://cgem.phas.ubc.ca/doc/documents/244/3/get/eval-adxl354-355-ug-1030.pdf?n=1400)
 
 Here is a wiring diagram of the system:
-![Accelerometer System Wiring Diagram](Accelerometer%20System.drawio%20.png)
+![Accelerometer System Wiring Diagram](Accelerometer%20System.drawio.png)
+
 
 
 
