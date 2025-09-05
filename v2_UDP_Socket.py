@@ -4,6 +4,17 @@ import csv
 from datetime import datetime  
 import time
 import os
+import logging
+
+# -----------------------------
+# Logging configuration
+# Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+LOG_LEVEL = "INFO"
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL),
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+log = logging.getLogger("udp_logger")
 
 NUM_PACKETS_PER_FILE = 26400 # Number of packets to write to each file
 NUM_FILES = -1  # Set to -1 for infinite, or specify the number of files 
@@ -53,20 +64,20 @@ sock = socket.socket(ip_family, protocol)
 # Bind to the specific IP and port
 try:
     sock.bind((LISTEN_IP, LISTEN_PORT))
-    print(" Bind successful. Listening for data...") # Can try using sock.bind(("0.0.0.0", LISTEN_PORT)) instead if having problems
+    log.info(" Bind successful. Listening for data...") # Can try using sock.bind(("0.0.0.0", LISTEN_PORT)) instead if having problems
 except OSError as e:
-    print(f" Bind failed: {e}")
+    log.error(f" Bind failed: {e}")
 
 # Print confirmation
-print(f"Listening for UDP packets from {UDP_IP}:{UDP_PORT} on port {LISTEN_PORT}...")
-print("Folder created at ", full_path)
+log.info(f"Listening for UDP packets from {UDP_IP}:{UDP_PORT} on port {LISTEN_PORT}...")
+log.info(f"Folder created at {full_path}")
 
 def process_payload(payload):
 
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     current_time_ns = time.time_ns() % 1_000_000_000
     
-    payload_hex = payload.hex()
+    payload_hex = payload.hex() if log.isEnabledFor(logging.DEBUG) else payload.hex()
     
     # Split payload_hex by the separator
     samples_hex = payload_hex.split("89abcdef")
@@ -82,7 +93,7 @@ def process_payload(payload):
     for i, sample_hex in enumerate(samples_hex):
         if len(sample_hex) < 32:
             if i != 60:
-                print(f"Warning: Skipping invalid sample at index {i}: {sample_hex} with surrounding {samples_hex[i-5:i+5]} and payload {payload_hex[i*16+i*4-50:i+i*16*4+50]}")
+                log.warning(f"Warning: Skipping invalid sample at index {i}: {sample_hex} with surrounding {samples_hex[i-5:i+5]} and payload {payload_hex[i*16+i*4-50:i+i*16*4+50]}")
             continue
     
     # Convert each hex segment to an integer 
@@ -109,10 +120,10 @@ def process_payload(payload):
 
             time_array.append(time_32bit)
             
-            print(f"Value 0: {value0}, Value 1: {value1}, Value 2: {value2}, Time Int: {time_32bit}")
+            log.debug(f"Value 0: {value0}, Value 1: {value1}, Value 2: {value2}, Time Int: {time_32bit}")
         
         except ValueError as e:
-            print(f"Error processing sample: {sample_hex} - {e}")
+            log.warning(f"Error processing sample: {sample_hex} - {e}")
         
     write = value0_array + value1_array + value2_array + status0_array + status1_array + status2_array + time_array
     
@@ -125,37 +136,50 @@ def process_payload(payload):
         writer = csv.writer(file)
         writer.writerow(write)
     
-    print(len(write), "samples written to file. First value:", write[0])
+    log.debug(len(write), "samples written to file. First value:", write[0])
+
+    # ---- sample rate tracking ----
+    process_payload.sample_count += len(value0_array)
+    now = time.time()
+    if now - process_payload.last_report >= 1.0:
+        sps = process_payload.sample_count / (now - process_payload.last_report)
+        log.info(f"Incoming sample rate: {sps:8.1f} SPS")
+        process_payload.sample_count = 0
+        process_payload.last_report = now
+
+# static vars
+process_payload.sample_count = 0
+process_payload.last_report = time.time()    
  
 # MAIN LOOP
 try:
     while True:
-        sock.settimeout(5.0)  # seconds
+        sock.settimeout(2.0)  # seconds
         try:
             data, addr = sock.recvfrom(PACKET_SIZE)
         except socket.timeout:
-            print("No data received within 2 seconds.")
+            log.warning("No data received within 2 seconds.")
         #data, addr = sock.recvfrom(PACKET_SIZE)  # Receive packet
          #os.delay(1000)
-        print(data, addr)
+        log.debug(f"rx {len(data)} B from {addr}")
         if addr[0] == UDP_IP and addr[1] == UDP_PORT:
         #if addr[0] == UDP_IP:   # only check IP, not port
             data_payload = data[0:]  # UDP header is removed
             process_payload(data_payload)  # Process the payload (function above)
             packet_idx += 1
             if packet_idx == NUM_PACKETS_PER_FILE:
-                print("All packets processed for current file. Next file initialized.")
+                log.info("All packets processed for current file. Next file initialized.")
                 packet_idx = 0
                 file_idx += 1
                 if NUM_FILES != -1 and file_idx >= NUM_FILES:
-                    print("All specified files processed. Exiting...")
+                    log.info("All specified files processed. Exiting...")
                     break
                 else:
                     filename = os.path.join(full_path, generate_filename(file_idx))
-                    print(f"Writing to new file: {filename}")
+                    log.info(f"Writing to new file: {filename}")
         else:
-            print(f"Ignored packet from {addr}")  # Ignore packets from other addresses/ports
+            log.warning(f"Ignored packet from {addr}")  # Ignore packets from other addresses/ports
 except KeyboardInterrupt:
-    print("Server stopped.")
+    log.info("Server stopped.")
 finally:
     sock.close()
