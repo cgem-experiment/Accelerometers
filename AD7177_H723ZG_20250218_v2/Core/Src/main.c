@@ -1,20 +1,20 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2024 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2024 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -63,22 +63,23 @@ TIM_HandleTypeDef htim23;
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "defaultTask",
+    .stack_size = 256 * 4,
+    .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ethernetTask */
 osThreadId_t ethernetTaskHandle;
 const osThreadAttr_t ethernetTask_attributes = {
-  .name = "ethernetTask",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityHigh,
+    .name = "ethernetTask",
+    .stack_size = 256 * 4,
+    .priority = (osPriority_t) osPriorityHigh,
 };
 /* USER CODE BEGIN PV */
 //PUT SETUP STUFF HERE
 uint16_t spiData[700];
 uint16_t tempBuffer[601];
 uint8_t rxBuffer24bit[5];
+static uint8_t g_txBuffer24bit_IT[5] = {AD7177_READ_DATA_REG, 0,0,0,0 };
 
 volatile bool g_init_done = false;
 
@@ -121,9 +122,9 @@ void initializeAD7177Board();
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
+ * @brief  The application entry point.
+ * @retval int
+ */
 int main(void)
 {
 
@@ -217,36 +218,36 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
-  {
-    /* USER CODE END WHILE */
+    {
+      /* USER CODE END WHILE */
 
-    /* USER CODE BEGIN 3 */
-  }
+      /* USER CODE BEGIN 3 */
+    }
   /* USER CODE END 3 */
 }
 
 /**
-  * @brief System Clock Configuration
-  * @retval None
-  */
+ * @brief System Clock Configuration
+ * @retval None
+ */
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
   /** Supply configuration update enable
-  */
+   */
   HAL_PWREx_ConfigSupply(PWR_LDO_SUPPLY);
 
   /** Configure the main internal regulator output voltage
-  */
+   */
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
 
   while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
 
   /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
+   * in the RCC_OscInitTypeDef structure.
+   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
   RCC_OscInitStruct.HSIState = RCC_HSI_DIV1;
@@ -262,15 +263,15 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOWIDE;
   RCC_OscInitStruct.PLL.PLLFRACN = 0;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
 
   /** Initializes the CPU, AHB and APB buses clocks
-  */
+   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
-                              |RCC_CLOCKTYPE_D3PCLK1|RCC_CLOCKTYPE_D1PCLK1;
+      |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
+      |RCC_CLOCKTYPE_D3PCLK1|RCC_CLOCKTYPE_D1PCLK1;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV2;
@@ -280,34 +281,34 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
 }
 
 /**
-  * @brief Peripherals Common Clock Configuration
-  * @retval None
-  */
+ * @brief Peripherals Common Clock Configuration
+ * @retval None
+ */
 void PeriphCommonClock_Config(void)
 {
   RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
 
   /** Initializes the peripherals clock
-  */
+   */
   PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_CKPER;
   PeriphClkInitStruct.CkperClockSelection = RCC_CLKPSOURCE_HSI;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
 }
 
 /**
-  * @brief SPI1 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief SPI1 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_SPI1_Init(void)
 {
 
@@ -342,19 +343,19 @@ static void MX_SPI1_Init(void)
   hspi1.Init.MasterKeepIOState = SPI_MASTER_KEEP_IO_STATE_ENABLE;
   hspi1.Init.IOSwap = SPI_IO_SWAP_DISABLE;
   if (HAL_SPI_Init(&hspi1) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   /* USER CODE BEGIN SPI1_Init 2 */
   /* USER CODE END SPI1_Init 2 */
 
 }
 
 /**
-  * @brief SPI4 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief SPI4 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_SPI4_Init(void)
 {
 
@@ -389,9 +390,9 @@ static void MX_SPI4_Init(void)
   hspi4.Init.MasterKeepIOState = SPI_MASTER_KEEP_IO_STATE_DISABLE;
   hspi4.Init.IOSwap = SPI_IO_SWAP_DISABLE;
   if (HAL_SPI_Init(&hspi4) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   /* USER CODE BEGIN SPI4_Init 2 */
 
   /* USER CODE END SPI4_Init 2 */
@@ -399,10 +400,10 @@ static void MX_SPI4_Init(void)
 }
 
 /**
-  * @brief TIM1 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief TIM1 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_TIM1_Init(void)
 {
 
@@ -426,25 +427,25 @@ static void MX_TIM1_Init(void)
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
   if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   if (HAL_TIM_OC_Init(&htim1) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   sConfigOC.OCMode = TIM_OCMODE_TIMING;
   sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
@@ -453,9 +454,9 @@ static void MX_TIM1_Init(void)
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
   if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
   sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
   sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
@@ -468,9 +469,9 @@ static void MX_TIM1_Init(void)
   sBreakDeadTimeConfig.Break2Filter = 0;
   sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
   if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   /* USER CODE BEGIN TIM1_Init 2 */
 
   /* USER CODE END TIM1_Init 2 */
@@ -478,10 +479,10 @@ static void MX_TIM1_Init(void)
 }
 
 /**
-  * @brief TIM2 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief TIM2 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_TIM2_Init(void)
 {
 
@@ -503,32 +504,32 @@ static void MX_TIM2_Init(void)
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
   if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
   sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   /* USER CODE BEGIN TIM2_Init 2 */
 
   /* USER CODE END TIM2_Init 2 */
@@ -536,10 +537,10 @@ static void MX_TIM2_Init(void)
 }
 
 /**
-  * @brief TIM23 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief TIM23 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_TIM23_Init(void)
 {
 
@@ -560,20 +561,20 @@ static void MX_TIM23_Init(void)
   htim23.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim23.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim23) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
   if (HAL_TIM_ConfigClockSource(&htim23, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim23, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    {
+      Error_Handler();
+    }
   /* USER CODE BEGIN TIM23_Init 2 */
 
   /* USER CODE END TIM23_Init 2 */
@@ -581,8 +582,8 @@ static void MX_TIM23_Init(void)
 }
 
 /**
-  * Enable DMA controller clock
-  */
+ * Enable DMA controller clock
+ */
 static void MX_DMA_Init(void)
 {
 
@@ -606,10 +607,10 @@ static void MX_DMA_Init(void)
 }
 
 /**
-  * @brief GPIO Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief GPIO Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -655,145 +656,151 @@ static void MX_GPIO_Init(void)
 // EXTI Line8 External Interrupt ISR Handler CallBackFun
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    if(GPIO_Pin == GPIO_PIN_8) // If The interrupt Source Is EXTI Line8 (PB8 Pin), which means that fresh data is ready
+  if(GPIO_Pin == GPIO_PIN_8) // If The interrupt Source Is EXTI Line8 (PB8 Pin), which means that fresh data is ready
     {
       if(g_init_done)
-      {
-    	uint8_t txBuffer24bit[5] = {AD7177_READ_DATA_REG, 0x00, 0x00, 0x00, 0x00};
-    	HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t *)txBuffer24bit, (uint8_t *)rxBuffer24bit, 5); // read the data register and trigger SPI callback function
-    	timer23val = __HAL_TIM_GET_COUNTER(&htim23);
-      }
+	{
+	  // Prevent EXTI from retriggering during the SPI transfer
+	  NVIC_DisableIRQ(EXTI9_5_IRQn);
+	  HAL_SPI_TransmitReceive_IT(&hspi1, g_txBuffer24bit_IT, (uint8_t *)rxBuffer24bit, 5); // read the data register and trigger SPI callback function
+	  timer23val = __HAL_TIM_GET_COUNTER(&htim23);
+	}
     }
 }
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
   if (hspi->Instance == SPI1)
-  {
-	  uint32_t value_24Bit =
-	              (rxBuffer24bit[1] << 16) |
-	              (rxBuffer24bit[2] << 8) |
-	               rxBuffer24bit[3];
+    {
+      uint32_t value_24Bit =
+	  (rxBuffer24bit[1] << 16) |
+	  (rxBuffer24bit[2] << 8) |
+	  rxBuffer24bit[3];
 
-	  uint8_t  status       = rxBuffer24bit[4];              // Bottom byte = status
+      uint8_t  status       = rxBuffer24bit[4];              // Bottom byte = status
 
-	  		bool rdy        = !(status & 0x80);   // Bit 7: 0 = data ready
-	  		bool adc_error  =  (status & 0x40);   // Bit 6: 1 = ADC error
-	  		bool crc_error  =  (status & 0x20);   // Bit 5: 1 = CRC error
-	  		uint8_t channel_id = status & 0x0F;   // Bits 3:0 = Channel ID
+      bool rdy        = !(status & 0x80);   // Bit 7: 0 = data ready
+      bool adc_error  =  (status & 0x40);   // Bit 6: 1 = ADC error
+      bool crc_error  =  (status & 0x20);   // Bit 5: 1 = CRC error
+      uint8_t channel_id = status & 0x0F;   // Bits 3:0 = Channel ID
 
-	  		// Check that the data is fresh and without error
-	  		if (rdy && !adc_error && !crc_error && channel_id < NUM_CH_ENABLED) {
-	  			channel_data[channel_id] = value_24Bit; // store data temporarily
-	  			channel_ready[channel_id] = 1; //set that channel's ready flag high (this is different from rdy)
-	  		}
+      // Check that the data is fresh and without error
+      if (rdy && !adc_error && !crc_error && channel_id < NUM_CH_ENABLED) {
+	  channel_data[channel_id] = value_24Bit; // store data temporarily
+	  channel_ready[channel_id] = 1; //set that channel's ready flag high (this is different from rdy)
+      }
 
-	  		// Once all 4 channels have been read, build and store packet
-	  		if (channel_ready[0] && channel_ready[1] && channel_ready[2]) {
+      // Once all 4 channels have been read, build and store packet
+      if (channel_ready[0] && channel_ready[1] && channel_ready[2]) {
 
-	  			// Clear ready flags
-	  			for (int i = 0; i < NUM_CH_ENABLED; i++) channel_ready[i] = 0;
+	  // Clear ready flags
+	  for (int i = 0; i < NUM_CH_ENABLED; i++) channel_ready[i] = 0;
 
-	  			// Fill spiData
-	  			for (int i = 0; i < NUM_CH_ENABLED; i++) {
-	  				spiData[spiIndex + (i * 2)]     = channel_data[i] & 0xFFFF; // bits 15:0
-	  				spiData[spiIndex + (i * 2) + 1] = (channel_data[i] >> 16) << 8 | i; // bits 23:16 + channel id
-	  			}
+	  // Fill spiData
+	  for (int i = 0; i < NUM_CH_ENABLED; i++) {
+	      spiData[spiIndex + (i * 2)]     = channel_data[i] & 0xFFFF; // bits 15:0
+	      spiData[spiIndex + (i * 2) + 1] = (channel_data[i] >> 16) << 8 | i; // bits 23:16 + channel id
+	  }
 
-	  			// Add timestamp
-	  			spiData[spiIndex + 6]  = timer23val & 0xFFFF;
-	  			spiData[spiIndex + 7]  = (timer23val >> 16) & 0xFFFF;
+	  // Add timestamp
+	  spiData[spiIndex + 6]  = timer23val & 0xFFFF;
+	  spiData[spiIndex + 7]  = (timer23val >> 16) & 0xFFFF;
 
-	  			//spacers (may change this later)
-	  			spiData[spiIndex + 8] = 0xAB89;
-	  			spiData[spiIndex + 9] = 0xEFCD;
+	  //spacers (may change this later)
+	  spiData[spiIndex + 8] = 0xAB89;
+	  spiData[spiIndex + 9] = 0xEFCD;
 
-	  			// Advance index
-	  			spiIndex += 10;
+	  // Advance index
+	  spiIndex += 10;
 
-	  			if (spiIndex >= 700) {
-	  				spiIndex = 0;
-	  			}
-	  			else if (spiIndex == 600) { // packet is ready
-	  				spiData[spiIndex] = sampleNum;
-	  				sampleNum++;
-	  				spiIndex++;
+	  if (spiIndex >= 700) {
+	      spiIndex = 0;
+	  }
+	  else if (spiIndex == 600) { // packet is ready
+	      spiData[spiIndex] = sampleNum;
+	      sampleNum++;
+	      spiIndex++;
 
-	  				BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-	  				vTaskNotifyGiveFromISR(ethernetTaskHandle, &xHigherPriorityTaskWoken); // function will set xHigherPriorityTaskWoken to pdTRUE if the unblocked task (ethernetTaskHandle) has a higher priority than the currently running task. Also unblocks task
-	  				portYIELD_FROM_ISR(xHigherPriorityTaskWoken); // if xHigherPriorityTaskWoken is pdTURE, scheduler will switch to the ethernetTaskHandle task as soon as the ISR completes. Otherwise, currently running task will continue to run after ISR completes
-	  			}
-	  		}
-  }
+	      BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	      vTaskNotifyGiveFromISR(ethernetTaskHandle, &xHigherPriorityTaskWoken); // function will set xHigherPriorityTaskWoken to pdTRUE if the unblocked task (ethernetTaskHandle) has a higher priority than the currently running task. Also unblocks task
+	      portYIELD_FROM_ISR(xHigherPriorityTaskWoken); // if xHigherPriorityTaskWoken is pdTURE, scheduler will switch to the ethernetTaskHandle task as soon as the ISR completes. Otherwise, currently running task will continue to run after ISR completes
+	  }
+      }
+
+      __HAL_GPIO_EXTI_CLEAR_FLAG(GPIO_PIN_8);   // clear EXTI line pending
+      //Re-enable EXTI IRQ for the next clean edge
+      NVIC_ClearPendingIRQ(EXTI9_5_IRQn);
+      NVIC_EnableIRQ(EXTI9_5_IRQn);
+    }
 }
 
 void AD7177_WriteRegister(uint8_t reg, uint32_t value, uint8_t num_bytes){
-    uint8_t cmd = (reg & 0x3F);
-    uint8_t tx[4] = { cmd, 0, 0, 0 };
-    if (num_bytes == 3) {
-        tx[1] = (value >> 16) & 0xFF;
-        tx[2] = (value >> 8) & 0xFF;
-        tx[3] = value & 0xFF;
-    } else if (num_bytes == 2) {
-        tx[1] = (value >> 8) & 0xFF;
-        tx[2] = value & 0xFF;
-    } else if (num_bytes == 1) {
-        tx[1] = value & 0xFF;
-    }
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
-    HAL_SPI_Transmit(&hspi1, tx, num_bytes + 1, HAL_MAX_DELAY);
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+  uint8_t cmd = (reg & 0x3F);
+  uint8_t tx[4] = { cmd, 0, 0, 0 };
+  if (num_bytes == 3) {
+      tx[1] = (value >> 16) & 0xFF;
+      tx[2] = (value >> 8) & 0xFF;
+      tx[3] = value & 0xFF;
+  } else if (num_bytes == 2) {
+      tx[1] = (value >> 8) & 0xFF;
+      tx[2] = value & 0xFF;
+  } else if (num_bytes == 1) {
+      tx[1] = value & 0xFF;
+  }
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+  HAL_SPI_Transmit(&hspi1, tx, num_bytes + 1, HAL_MAX_DELAY);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
 }
 
 uint32_t AD7177_ReadRegister(uint8_t reg, uint8_t num_bytes)
 {
-    uint8_t cmd = 0x40 | (reg & 0x3F);
-    uint8_t tx[4] = { cmd, 0, 0, 0 };
-    uint8_t rx[4] = {0};
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
-    HAL_SPI_TransmitReceive(&hspi1, tx, rx, num_bytes + 1, 50);
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
-    uint32_t result = 0;
-    for (int i = 0; i < num_bytes; ++i) {
-        result = (result << 8) | rx[i + 1];
-    }
-    return result;
+  uint8_t cmd = 0x40 | (reg & 0x3F);
+  uint8_t tx[4] = { cmd, 0, 0, 0 };
+  uint8_t rx[4] = {0};
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+  HAL_SPI_TransmitReceive(&hspi1, tx, rx, num_bytes + 1, 50);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+  uint32_t result = 0;
+  for (int i = 0; i < num_bytes; ++i) {
+      result = (result << 8) | rx[i + 1];
+  }
+  return result;
 }
 
 void initializeAD7177Board() {
-    // Reset
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
-    HAL_SPI_Transmit(&hspi1, (uint8_t *)resetSequence, 8, HAL_MAX_DELAY);
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+  // Reset
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+  HAL_SPI_Transmit(&hspi1, (uint8_t *)resetSequence, 8, HAL_MAX_DELAY);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
 
-    HAL_Delay(5);
+  HAL_Delay(5);
 
-    // set up ADC Mode
-    AD7177_WriteRegister(AD7177_REG_ADCMODE, AD7177_ADCMODE, 2);
+  // set up ADC Mode
+  AD7177_WriteRegister(AD7177_REG_ADCMODE, AD7177_ADCMODE, 2);
 
-    // set up IF Mode, enable DATA_STAT byte, and continuous conversion mode
-    AD7177_WriteRegister(AD7177_REG_IFMODE, AD7177_IFMODE, 2);
+  // set up IF Mode, enable DATA_STAT byte, and continuous conversion mode
+  AD7177_WriteRegister(AD7177_REG_IFMODE, AD7177_IFMODE, 2);
 
-    // Configure filter mode 0
-    AD7177_WriteRegister(AD7177_REG_FILTCON0, AD7177_FILTCON0, 2);
+  // Configure filter mode 0
+  AD7177_WriteRegister(AD7177_REG_FILTCON0, AD7177_FILTCON0, 2);
 
-    // Configure setup mode 0
-    AD7177_WriteRegister(AD7177_REG_SETUPCON0, AD7177_SETUPCON0, 2);
+  // Configure setup mode 0
+  AD7177_WriteRegister(AD7177_REG_SETUPCON0, AD7177_SETUPCON0, 2);
 
-    // Setup channels 0 to 2
-    AD7177_WriteRegister(AD7177_REG_CH0, AD7177_CH0_SETUP0, 2);
-    AD7177_WriteRegister(AD7177_REG_CH1, AD7177_CH1_SETUP0, 2);
-    AD7177_WriteRegister(AD7177_REG_CH2, AD7177_CH2_SETUP0, 2);
+  // Setup channels 0 to 2
+  AD7177_WriteRegister(AD7177_REG_CH0, AD7177_CH0_SETUP0, 2);
+  AD7177_WriteRegister(AD7177_REG_CH1, AD7177_CH1_SETUP0, 2);
+  AD7177_WriteRegister(AD7177_REG_CH2, AD7177_CH2_SETUP0, 2);
 }
 
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
 /**
-  * @brief  Function implementing the defaultTask thread.
-  * @param  argument: Not used
-  * @retval None
-  */
+ * @brief  Function implementing the defaultTask thread.
+ * @param  argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void *argument)
 {
@@ -814,81 +821,81 @@ void StartDefaultTask(void *argument)
 
   /* Infinite loop */
   for(;;)
-  {
-	  vTaskDelete(NULL); //deletes task
-  }
+    {
+      vTaskDelete(NULL); //deletes task
+    }
   /* USER CODE END 5 */
 }
 
 /* USER CODE BEGIN Header_startEthernetTask */
 /**
-* @brief Function implementing the ethernetTask thread.
-* @param argument: Not used
-* @retval None
-*/
+ * @brief Function implementing the ethernetTask thread.
+ * @param argument: Not used
+ * @retval None
+ */
 /* USER CODE END Header_startEthernetTask */
 void startEthernetTask(void *argument)
 {
   /* USER CODE BEGIN startEthernetTask */
 
-	extern struct netif gnetif;
-	//Wait for default task to set up PHY
-	while (!netif_is_up(&gnetif)) {
-	  osDelay(1);
-	}
-	// Destination (PC) address from macros
-	ip_addr_t pc_ip;
-	IP_ADDR4(&pc_ip, NET_PCIP0, NET_PCIP1, NET_PCIP2, NET_PCIP3);
+  extern struct netif gnetif;
+  //Wait for default task to set up PHY
+  while (!netif_is_up(&gnetif)) {
+      osDelay(1);
+  }
+  // Destination (PC) address from macros
+  ip_addr_t pc_ip;
+  IP_ADDR4(&pc_ip, NET_PCIP0, NET_PCIP1, NET_PCIP2, NET_PCIP3);
 
-	struct udp_pcb* my_udp = udp_new();
-	// Bind to our source port; using IP_ADDR_ANY lets lwIP pick the bound IP from gnetif
-	udp_bind(my_udp, IP_ADDR_ANY, NET_SRC_PORT);
-	// Set default destination
-	udp_connect(my_udp, &pc_ip, NET_DST_PORT);
+  struct udp_pcb* my_udp = udp_new();
+  // Bind to our source port; using IP_ADDR_ANY lets lwIP pick the bound IP from gnetif
+  udp_bind(my_udp, IP_ADDR_ANY, NET_SRC_PORT);
+  // Set default destination
+  udp_connect(my_udp, &pc_ip, NET_DST_PORT);
 
-	struct pbuf* udp_buffer = NULL;
+  struct pbuf* udp_buffer = NULL;
 
-	// Start timer 23
-	HAL_TIM_Base_Start(&htim23);
-	// Start timer 1
-	HAL_TIM_Base_Start(&htim1);
-	// Start timer 2 with 1ms interrupts
-	HAL_TIM_Base_Start_IT(&htim2);
+  // Start timer 23
+  HAL_TIM_Base_Start(&htim23);
+  // Start timer 1
+  HAL_TIM_Base_Start(&htim1);
+  // Start timer 2 with 1ms interrupts
+  HAL_TIM_Base_Start_IT(&htim2);
 
-	initializeAD7177Board();
-	g_init_done = true;
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET); // pull CS low
+  initializeAD7177Board();
+  g_init_done = true;
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET); // pull CS low
 
-	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn); // enable interrupt for shared DOUT/RDY pin
-	for (;;)
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn); // enable interrupt for shared DOUT/RDY pin
+  for (;;)
+    {
+      // wait for notification from the SPI callback function when a full packet is ready
+      ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+      // Copy samples from spiData to tempBuffer
+      memcpy(tempBuffer, spiData, sizeof(tempBuffer));
+
+      // Send the data over Ethernet
+      udp_buffer = pbuf_alloc(PBUF_TRANSPORT, sizeof(tempBuffer), PBUF_RAM);
+      if (udp_buffer != NULL)
 	{
-		// wait for notification from the SPI callback function when a full packet is ready
-		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-		// Copy samples from spiData to tempBuffer
-		memcpy(tempBuffer, spiData, sizeof(tempBuffer));
-
-		// Send the data over Ethernet
-		udp_buffer = pbuf_alloc(PBUF_TRANSPORT, sizeof(tempBuffer), PBUF_RAM);
-		if (udp_buffer != NULL)
-		{
-			memcpy(udp_buffer->payload, tempBuffer, sizeof(tempBuffer));
-			udp_send(my_udp, udp_buffer);
-			pbuf_free(udp_buffer);
-		}
-
-		// Shift the remaining samples up in the spiData buffer (pointer to dest, pointer to source, number of bytes)
-		memmove(spiData, &spiData[601], sizeof(spiData) - sizeof(tempBuffer));
-
-		// Update spiIndex to reflect the new starting position
-		spiIndex -= 601;
-
-		osDelay(1);
+	  memcpy(udp_buffer->payload, tempBuffer, sizeof(tempBuffer));
+	  udp_send(my_udp, udp_buffer);
+	  pbuf_free(udp_buffer);
 	}
+
+      // Shift the remaining samples up in the spiData buffer (pointer to dest, pointer to source, number of bytes)
+      memmove(spiData, &spiData[601], sizeof(spiData) - sizeof(tempBuffer));
+
+      // Update spiIndex to reflect the new starting position
+      spiIndex -= 601;
+
+      osDelay(1);
+    }
   /* USER CODE END startEthernetTask */
 }
 
- /* MPU Configuration */
+/* MPU Configuration */
 
 void MPU_Config(void)
 {
@@ -898,7 +905,7 @@ void MPU_Config(void)
   HAL_MPU_Disable();
 
   /** Initializes and configures the Region and the memory to be protected
-  */
+   */
   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
   MPU_InitStruct.Number = MPU_REGION_NUMBER0;
   MPU_InitStruct.BaseAddress = 0x0;
@@ -914,7 +921,7 @@ void MPU_Config(void)
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
 
   /** Initializes and configures the Region and the memory to be protected
-  */
+   */
   MPU_InitStruct.Number = MPU_REGION_NUMBER1;
   MPU_InitStruct.BaseAddress = 0x30000000;
   MPU_InitStruct.Size = MPU_REGION_SIZE_1KB;
@@ -925,7 +932,7 @@ void MPU_Config(void)
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
 
   /** Initializes and configures the Region and the memory to be protected
-  */
+   */
   MPU_InitStruct.Number = MPU_REGION_NUMBER2;
   MPU_InitStruct.BaseAddress = 0x30000200;
   MPU_InitStruct.Size = MPU_REGION_SIZE_64KB;
@@ -940,49 +947,49 @@ void MPU_Config(void)
 }
 
 /**
-  * @brief  Period elapsed callback in non blocking mode
-  * @note   This function is called  when TIM6 interrupt took place, inside
-  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
-  * a global variable "uwTick" used as application time base.
-  * @param  htim : TIM handle
-  * @retval None
-  */
+ * @brief  Period elapsed callback in non blocking mode
+ * @note   This function is called  when TIM6 interrupt took place, inside
+ * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+ * a global variable "uwTick" used as application time base.
+ * @param  htim : TIM handle
+ * @retval None
+ */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   /* USER CODE BEGIN Callback 0 */
 
   /* USER CODE END Callback 0 */
   if (htim->Instance == TIM6)
-  {
-    HAL_IncTick();
-  }
+    {
+      HAL_IncTick();
+    }
   /* USER CODE BEGIN Callback 1 */
 
   /* USER CODE END Callback 1 */
 }
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
   while (1)
-  {
-  }
+    {
+    }
   /* USER CODE END Error_Handler_Debug */
 }
 #ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
+ * @brief  Reports the name of the source file and the source line number
+ *         where the assert_param error has occurred.
+ * @param  file: pointer to the source file name
+ * @param  line: assert_param error line source number
+ * @retval None
+ */
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
