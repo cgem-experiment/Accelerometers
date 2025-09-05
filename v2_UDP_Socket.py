@@ -14,7 +14,7 @@ BASE_PATH = r"C:\Users\Public\Accelerometer_data"  # Change this variable to set
 UDP_IP = "192.168.1.30" #Remote (MCU) IP
 UDP_PORT = 8
 #LISTEN_IP = "10.20.1.3"
-LISTEN_IP = "192.168.1.10" #Host (This PC) IP
+LISTEN_IP = "192.168.1.10" #Host (This PC) IPasdf
 LISTEN_PORT = 12345 #55151 #CHANGE IF ON SITE
 PACKET_SIZE = 601*2 + 42  # 600 bytes of data + 42 bytes UDP header
 

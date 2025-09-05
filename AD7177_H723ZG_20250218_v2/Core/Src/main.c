@@ -80,6 +80,8 @@ uint16_t spiData[700];
 uint16_t tempBuffer[601];
 uint8_t rxBuffer24bit[5];
 
+volatile bool g_init_done = false;
+
 volatile uint16_t spiIndex = 0;
 volatile uint32_t sampleNum = 0;
 
@@ -167,6 +169,7 @@ int main(void)
   MX_TIM1_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
+  HAL_Delay(500); //Wait for AD7177 board to power up
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
   HAL_SPI_Transmit(&hspi1, (uint8_t*)resetSequence, 8, 50);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
@@ -336,7 +339,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.MasterSSIdleness = SPI_MASTER_SS_IDLENESS_00CYCLE;
   hspi1.Init.MasterInterDataIdleness = SPI_MASTER_INTERDATA_IDLENESS_00CYCLE;
   hspi1.Init.MasterReceiverAutoSusp = SPI_MASTER_RX_AUTOSUSP_DISABLE;
-  hspi1.Init.MasterKeepIOState = SPI_MASTER_KEEP_IO_STATE_DISABLE;
+  hspi1.Init.MasterKeepIOState = SPI_MASTER_KEEP_IO_STATE_ENABLE;
   hspi1.Init.IOSwap = SPI_IO_SWAP_DISABLE;
   if (HAL_SPI_Init(&hspi1) != HAL_OK)
   {
@@ -642,7 +645,7 @@ static void MX_GPIO_Init(void)
   HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
-  //remove HAL_NVIC_EnableIRQ above
+  HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
@@ -654,9 +657,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     if(GPIO_Pin == GPIO_PIN_8) // If The interrupt Source Is EXTI Line8 (PB8 Pin), which means that fresh data is ready
     {
-      uint8_t txBuffer24bit[5] = {AD7177_READ_DATA_REG, 0x00, 0x00, 0x00, 0x00};
-	  HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t *)txBuffer24bit, (uint8_t *)rxBuffer24bit, 5); // read the data register and trigger SPI callback function
-	  timer23val = __HAL_TIM_GET_COUNTER(&htim23);
+      if(g_init_done)
+      {
+    	uint8_t txBuffer24bit[5] = {AD7177_READ_DATA_REG, 0x00, 0x00, 0x00, 0x00};
+    	HAL_SPI_TransmitReceive_IT(&hspi1, (uint8_t *)txBuffer24bit, (uint8_t *)rxBuffer24bit, 5); // read the data register and trigger SPI callback function
+    	timer23val = __HAL_TIM_GET_COUNTER(&htim23);
+      }
     }
 }
 
@@ -850,7 +856,7 @@ void startEthernetTask(void *argument)
 	HAL_TIM_Base_Start_IT(&htim2);
 
 	initializeAD7177Board();
-
+	g_init_done = true;
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET); // pull CS low
 
 	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn); // enable interrupt for shared DOUT/RDY pin
