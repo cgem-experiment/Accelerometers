@@ -5,6 +5,7 @@ from datetime import datetime
 import time
 import os
 import logging
+from collections import deque
 
 # -----------------------------
 # Logging configuration
@@ -15,6 +16,17 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 log = logging.getLogger("udp_logger")
+
+_now = time.perf_counter  
+
+# ---- Sample-rate display tuning ----
+# How often to print the rate
+RATE_REPORT_PERIOD_SEC = 1.0
+# Moving-average window (seconds) for wall-clock rate
+RATE_MOVING_WINDOW_SEC = 5.0
+# MCU timestamp tick period (TIM23 = 1 MHz = 1 us/tick)
+
+MCU_TICK_SEC = 1e-6
 
 NUM_PACKETS_PER_FILE = 26400 # Number of packets to write to each file
 NUM_FILES = -1  # Set to -1 for infinite, or specify the number of files 
@@ -77,10 +89,9 @@ def process_payload(payload):
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     current_time_ns = time.time_ns() % 1_000_000_000
     
-    payload_hex = payload.hex() if log.isEnabledFor(logging.DEBUG) else payload.hex()
-    
-    # Split payload_hex by the separator
-    samples_hex = payload_hex.split("89abcdef")
+    # Work in bytes (more robust than hex slicing)
+    SEPARATOR = b"\x89\xab\xcd\xef"
+    samples_bytes = payload.split(SEPARATOR)
     
     value0_array = []
     value1_array = []
@@ -90,40 +101,34 @@ def process_payload(payload):
     status2_array = []
     time_array = []
     
-    for i, sample_hex in enumerate(samples_hex):
-        if len(sample_hex) < 32:
-            if i != 60:
+    for i, chunk in enumerate(samples_bytes):
+        if len(chunk) < 16:
+             if i != 60:
                 log.warning(f"Warning: Skipping invalid sample at index {i}: {sample_hex} with surrounding {samples_hex[i-5:i+5]} and payload {payload_hex[i*16+i*4-50:i+i*16*4+50]}")
-            continue
+                log.debug(f"Skipping short sample at index {i} (len={len(chunk)})")
+             continue
     
-    # Convert each hex segment to an integer 
-    #can make this way more efficient using numpy arrays and indexing directly, instead of 7 individual lists
         try:
-            value0 = int(sample_hex[6:8] + sample_hex[2:4] + sample_hex[0:2], 16)
-            status0 = int(sample_hex[4:6], 16)
-            
-            value1 = int(sample_hex[14:16] + sample_hex[10:12] + sample_hex[8:10], 16)
-            status1 = int(sample_hex[12:14])
-      
-            value2 = int(sample_hex[22:24] + sample_hex[18:20] + sample_hex[16:18], 16)
-            status2 = int(sample_hex[20:22])
-            
-            time_32bit = int(sample_hex[40:32] + sample_hex[28:30] + sample_hex[26:28] + sample_hex[24:26], 16) #24-32
-            
-            value0_array.append(value0)
-            value1_array.append(value1)
-            value2_array.append(value2)
+            # Layout per ISR:
+            # bytes 0..1: ch0 low16 (LE),  2: ch0_id,  3: ch0 high8
+            # bytes 4..5: ch1 low16 (LE),  6: ch1_id,  7: ch1 high8
+            # bytes 8..9: ch2 low16 (LE), 10: ch2_id, 11: ch2 high8
+            # bytes 12..15: TIM23 timestamp (low16 then high16) → 32-bit LE
+            value0  = chunk[0] | (chunk[1] << 8) | (chunk[3] << 16)
+            status0 = chunk[2]
+            value1  = chunk[4] | (chunk[5] << 8) | (chunk[7] << 16)
+            status1 = chunk[6]
+            value2  = chunk[8] | (chunk[9] << 8) | (chunk[11] << 16)
+            status2 = chunk[10]
+            time_32bit = int.from_bytes(chunk[12:16], "little")
 
-            status0_array.append(status0)
-            status1_array.append(status1)
-            status2_array.append(status2)
-
+            value0_array.append(value0); value1_array.append(value1); value2_array.append(value2)
+            status0_array.append(status0); status1_array.append(status1); status2_array.append(status2)
             time_array.append(time_32bit)
-            
+
             log.debug(f"Value 0: {value0}, Value 1: {value1}, Value 2: {value2}, Time Int: {time_32bit}")
-        
-        except ValueError as e:
-            log.warning(f"Error processing sample: {sample_hex} - {e}")
+        except Exception as e:
+            log.warning(f"Error processing sample chunk {i} (len={len(chunk)}): {e}")
         
     write = value0_array + value1_array + value2_array + status0_array + status1_array + status2_array + time_array
     
@@ -136,20 +141,76 @@ def process_payload(payload):
         writer = csv.writer(file)
         writer.writerow(write)
     
-    log.debug(len(write), "samples written to file. First value:", write[0])
+    log.debug(f"{len(write)} fields written to file. First value: {write[0]}")
 
-    # ---- sample rate tracking ----
-    process_payload.sample_count += len(value0_array)
-    now = time.time()
-    if now - process_payload.last_report >= 1.0:
-        sps = process_payload.sample_count / (now - process_payload.last_report)
-        log.info(f"Incoming sample rate: {sps:8.1f} SPS")
-        process_payload.sample_count = 0
+    # ---- sample-rate tracking (wall clock, moving average) ----
+    n = min(60, len(value0_array))  # number of samples in this packet
+    now = _now()
+    process_payload.window.append((now, n))
+    process_payload.window_samples += n
+    # Trim old entries outside the moving window
+    cutoff = now - RATE_MOVING_WINDOW_SEC
+    while process_payload.window and process_payload.window[0][0] < cutoff:
+        _, old_n = process_payload.window.popleft()
+        process_payload.window_samples -= old_n
+
+    # ---- sample-rate tracking (from MCU timestamps) ----
+    # Accumulate tick deltas across this packet (handle 32-bit wrap)
+    last = process_payload.last_mcu_ts
+    for t in time_array:
+        if last is not None:
+            dt = (t - last) & 0xFFFFFFFF
+            if dt > 0:
+                process_payload.mcu_tick_accum += dt
+                process_payload.mcu_sample_accum += 1
+        last = t
+    process_payload.last_mcu_ts = last
+
+    # Wall-clock duration is the span covered by the window, clamped to the window size
+    if process_payload.window:
+        duration_wc = max(min(now - process_payload.window[0][0], RATE_MOVING_WINDOW_SEC), 1e-6)
+    else:
+        duration_wc = 1e-6
+
+    # ---- packet-based estimator (packets/sec × 60) ----
+    process_payload.pkt_times.append(now)
+    # trim pkt deque to window
+    while process_payload.pkt_times and process_payload.pkt_times[0] < cutoff:
+        process_payload.pkt_times.popleft()
+    if len(process_payload.pkt_times) >= 2:
+        duration_pkts = max(process_payload.pkt_times[-1] - process_payload.pkt_times[0], 1e-6)
+        sps_pkts = (len(process_payload.pkt_times) - 1) / duration_pkts * 60.0
+    else:
+        sps_pkts = 0.0    
+
+    # Periodic reporting
+    if (now - process_payload.last_report) >= RATE_REPORT_PERIOD_SEC:
+        # Wall-clock moving average
+        sps_wc = process_payload.window_samples / duration_wc
+        
+        # MCU timestamp-based rate
+        if process_payload.mcu_tick_accum > 0:
+            sps_mcu = process_payload.mcu_sample_accum / (process_payload.mcu_tick_accum * MCU_TICK_SEC)
+        else:
+            sps_mcu = 0.0
+
+        log.info(
+            f"Incoming sample rate: {sps_wc:8.1f} SPS (avg {RATE_MOVING_WINDOW_SEC:.1f}s)"
+            f" | pkts×60: {sps_pkts:8.1f} SPS"
+            f" | MCU: {sps_mcu:8.1f} SPS"
+        )
         process_payload.last_report = now
+        process_payload.mcu_tick_accum = 0
+        process_payload.mcu_sample_accum = 0
 
 # static vars
-process_payload.sample_count = 0
-process_payload.last_report = time.time()    
+process_payload.window = deque()
+process_payload.window_samples = 0
+process_payload.last_report = _now()
+process_payload.last_mcu_ts = None
+process_payload.mcu_tick_accum = 0
+process_payload.mcu_sample_accum = 0
+process_payload.pkt_times = deque()
  
 # MAIN LOOP
 try:

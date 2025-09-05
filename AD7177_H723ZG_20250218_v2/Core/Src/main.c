@@ -690,7 +690,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 	  channel_ready[channel_id] = 1; //set that channel's ready flag high (this is different from rdy)
       }
 
-      // Once all 4 channels have been read, build and store packet
+      // Once all channels have been read, build and store packet
       if (channel_ready[0] && channel_ready[1] && channel_ready[2]) {
 
 	  // Clear ready flags
