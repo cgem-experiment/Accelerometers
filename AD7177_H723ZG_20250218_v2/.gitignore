@@ -1,0 +1,47 @@
+# ── STM32CubeIDE / Eclipse (user-specific or build artifacts) ────────────────
+.settings/
+.metadata/
+.externalToolBuilders/
+.recommenders/
+
+# Per-core & top-level build dirs
+[Cc][Mm]*/Debug/
+[Cc][Mm]*/Release/
+Debug/
+Release/
+
+# CubeIDE launch configs (per-user)
+*.launch
+
+# ── Build outputs ───────────────────────────────────────────────────────────
+*.o
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+*.lst
+*.srec
+*.su
+*.gcno
+*.gcda
+
+# ── Optional editor clutter ─────────────────────────────────────────────────
+.vscode/
+.idea/
+*.bak
+*~
+
+# ── OS clutter ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── What to KEEP (do NOT ignore) ────────────────────────────────────────────
+# Keep these in repo so project builds everywhere:
+#   - Core/ (app + generated code)
+#   - Drivers/ (HAL, CMSIS, BSP, etc.)
+#   - Middlewares/ (FreeRTOS, USB, FatFS, LWIP, TouchGFX, etc.)
+#   - .ioc (CubeMX config)
+#   - .project, .cproject (Eclipse project metadata)
+#   - .mxproject if present

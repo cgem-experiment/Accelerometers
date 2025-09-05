@@ -7,12 +7,14 @@ import os
 
 NUM_PACKETS_PER_FILE = 26400 # Number of packets to write to each file
 NUM_FILES = -1  # Set to -1 for infinite, or specify the number of files 
-BASE_PATH = r"C:\Users\natal\Accelerometer_data"  # Change this variable to set the base directory
+BASE_PATH = r"C:\Users\Public\Accelerometer_data"  # Change this variable to set the base directory
 
 # Configuration
-UDP_IP = "10.20.3.3"
+#UDP_IP = "10.20.3.3"
+UDP_IP = "192.168.1.30" #Remote (MCU) IP
 UDP_PORT = 8
-LISTEN_IP = "10.20.1.3"
+#LISTEN_IP = "10.20.1.3"
+LISTEN_IP = "192.168.1.10" #Host (This PC) IP
 LISTEN_PORT = 12345 #55151 #CHANGE IF ON SITE
 PACKET_SIZE = 601*2 + 42  # 600 bytes of data + 42 bytes UDP header
 
@@ -128,7 +130,7 @@ def process_payload(payload):
 # MAIN LOOP
 try:
     while True:
-        sock.settimeout(2.0)  # seconds
+        sock.settimeout(5.0)  # seconds
         try:
             data, addr = sock.recvfrom(PACKET_SIZE)
         except socket.timeout:
@@ -137,6 +139,7 @@ try:
          #os.delay(1000)
         print(data, addr)
         if addr[0] == UDP_IP and addr[1] == UDP_PORT:
+        #if addr[0] == UDP_IP:   # only check IP, not port
             data_payload = data[0:]  # UDP header is removed
             process_payload(data_payload)  # Process the payload (function above)
             packet_idx += 1

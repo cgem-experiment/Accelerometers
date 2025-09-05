@@ -28,6 +28,8 @@
 #include <stdbool.h>
 #include "stm32h7xx_it.h"
 #include "AD7177_registers.h"
+#include "net_config.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -637,6 +639,7 @@ static void MX_GPIO_Init(void)
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   //remove HAL_NVIC_EnableIRQ above
@@ -676,7 +679,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 	  		// Check that the data is fresh and without error
 	  		if (rdy && !adc_error && !crc_error && channel_id < NUM_CH_ENABLED) {
 	  			channel_data[channel_id] = value_24Bit; // store data temporarily
-	  			channel_ready[channel_id] = 1; //s et that channel's ready flag high (this is different from rdy)
+	  			channel_ready[channel_id] = 1; //set that channel's ready flag high (this is different from rdy)
 	  		}
 
 	  		// Once all 4 channels have been read, build and store packet
@@ -789,8 +792,20 @@ void initializeAD7177Board() {
 void StartDefaultTask(void *argument)
 {
   /* init code for LWIP */
+  MX_LWIP_Init();
   /* USER CODE BEGIN 5 */
-	// MAKE SURE TO DELETE ANY "MX_LWIP_Init()" ABOVE
+
+  extern struct netif gnetif;
+
+  // Apply compile-time IP settings (overrides CubeMX static values)
+  ip_addr_t ipaddr, netmask, gw;
+  IP_ADDR4(&ipaddr,  NET_IPADDR0,  NET_IPADDR1,  NET_IPADDR2,  NET_IPADDR3);
+  IP_ADDR4(&netmask, NET_NETMASK0, NET_NETMASK1, NET_NETMASK2, NET_NETMASK3);
+  IP_ADDR4(&gw,      NET_GW0,     NET_GW1,     NET_GW2,     NET_GW3);
+  netif_set_addr(&gnetif, &ipaddr, &netmask, &gw);
+  netif_set_up(&gnetif);              // bring interface up
+  netif_set_link_up(&gnetif);      // only if you really need to force link
+
   /* Infinite loop */
   for(;;)
   {
@@ -809,24 +824,22 @@ void StartDefaultTask(void *argument)
 void startEthernetTask(void *argument)
 {
   /* USER CODE BEGIN startEthernetTask */
-	MX_LWIP_Init(); // initialize LWIP stack
-	osDelay(100); // let LWIP be initialized
 
 	extern struct netif gnetif;
-	netif_set_up(&gnetif);
-	netif_set_link_up(&gnetif); // Forces link status if not auto-detected
+	//Wait for default task to set up PHY
+	while (!netif_is_up(&gnetif)) {
+	  osDelay(1);
+	}
+	// Destination (PC) address from macros
+	ip_addr_t pc_ip;
+	IP_ADDR4(&pc_ip, NET_PCIP0, NET_PCIP1, NET_PCIP2, NET_PCIP3);
 
-	// Own IP (STM32)
-	ip_addr_t myIPaddr;
-	IP_ADDR4(&myIPaddr, 10, 20, 3, 3);
-
-	// Computer IP
-	ip_addr_t PC_IPADDR;
-	IP_ADDR4(&PC_IPADDR, 10, 20, 1, 3);
 	struct udp_pcb* my_udp = udp_new();
+	// Bind to our source port; using IP_ADDR_ANY lets lwIP pick the bound IP from gnetif
+	udp_bind(my_udp, IP_ADDR_ANY, NET_SRC_PORT);
+	// Set default destination
+	udp_connect(my_udp, &pc_ip, NET_DST_PORT);
 
-	udp_bind(my_udp, &myIPaddr, 8);
-	udp_connect(my_udp, &PC_IPADDR, 12345);
 	struct pbuf* udp_buffer = NULL;
 
 	// Start timer 23
@@ -956,8 +969,7 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
