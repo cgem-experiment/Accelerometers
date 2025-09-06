@@ -90,10 +90,21 @@ def process_payload(payload):
     
     SEPARATOR = b"\x89\xab\xcd\xef"
     parts = payload.split(SEPARATOR)
-    # Drop trailing bytes after the last separator (e.g., sampleNum trailer = 2B)
-    tail = parts[-1] if parts else b""
-    samples_bytes = parts[:-1]
     EXPECTED_SAMPLES_PER_PACKET = 60
+    parts = payload.split(SEPARATOR)
+    # trailer after the last separator holds the 16-bit sampleNum (LE)
+    tail = parts[-1] if parts else b""
+    sample_num = int.from_bytes(tail[:2], "little") if len(tail) >= 2 else None
+    samples_bytes = parts[:-1]  # the 60 real 16-byte records
+    # Detect dropped/reordered UDP packets via sampleNum (not saved)
+    if sample_num is not None:
+        prev = getattr(process_payload, "prev_sample_num", None)
+        if prev is not None:
+            step = (sample_num - prev) & 0xFFFF
+            if step != 1:
+                process_payload.packet_drop_count += 1
+                log.warning(f"packet loss/reorder: sampleNum {prev} -> {sample_num} (Δ={step})")
+        process_payload.prev_sample_num = sample_num
     if len(samples_bytes) != EXPECTED_SAMPLES_PER_PACKET:
         log.warning(f"packet had {len(samples_bytes)} samples; trailing tail={len(tail)}B")
     
@@ -198,12 +209,14 @@ def process_payload(payload):
             f"Incoming(avg): {process_payload.sps_pkts_ema:8.1f} SPS"
             f" | wall(avg): {process_payload.sps_wc_ema:8.1f} SPS (period ~{dt:.2f}s)"
             f" | MCU: {sps_mcu:8.1f} SPS @ tick≈{tick_str}"
+            f" | drops: {process_payload.packet_drop_count}"            
         )
         process_payload.last_report = now
         process_payload.mcu_tick_accum = 0
         process_payload.mcu_sample_accum = 0
         process_payload.period_samples = 0
         process_payload.packets_period = 0
+        process_payload.packet_drop_count = 0
 
 # static vars
 process_payload.period_samples = 0
@@ -214,6 +227,8 @@ process_payload.mcu_tick_accum = 0
 process_payload.mcu_sample_accum = 0
 process_payload.sps_pkts_ema = None
 process_payload.sps_wc_ema   = None
+process_payload.prev_sample_num = None
+process_payload.packet_drop_count = 0
  
 # MAIN LOOP
 try:
