@@ -88,9 +88,14 @@ def process_payload(payload):
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     current_time_ns = time.time_ns() % 1_000_000_000
     
-    # Work in bytes (more robust than hex slicing)
     SEPARATOR = b"\x89\xab\xcd\xef"
-    samples_bytes = payload.split(SEPARATOR)
+    parts = payload.split(SEPARATOR)
+    # Drop trailing bytes after the last separator (e.g., sampleNum trailer = 2B)
+    tail = parts[-1] if parts else b""
+    samples_bytes = parts[:-1]
+    EXPECTED_SAMPLES_PER_PACKET = 60
+    if len(samples_bytes) != EXPECTED_SAMPLES_PER_PACKET:
+        log.warning(f"packet had {len(samples_bytes)} samples; trailing tail={len(tail)}B")
     
     value0_array = []
     value1_array = []
@@ -99,11 +104,11 @@ def process_payload(payload):
     status1_array = []
     status2_array = []
     time_array = []
-    
+
     for i, chunk in enumerate(samples_bytes):
-        if len(chunk) < 16:
-            # short/partial record: skip quietly unless debugging
-            log.debug(f"Skipping short sample at index {i} (len={len(chunk)})")
+        if len(chunk) != 16:
+            # malformed record—skip; should be rare
+            log.warning(f"Skipping malformed sample at index {i} (len={len(chunk)})")
             continue
     
         try:
