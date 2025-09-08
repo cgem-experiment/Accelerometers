@@ -5,6 +5,8 @@ from datetime import datetime
 import time
 import os
 import logging
+from pathlib import Path
+import atexit
 
 
 # -----------------------------
@@ -29,17 +31,24 @@ MCU_TICK_SEC = 1e-6
 
 NUM_PACKETS_PER_FILE = 26400 # Number of packets to write to each file
 NUM_FILES = -1  # Set to -1 for infinite, or specify the number of files 
-BASE_PATH = r"C:\Users\Public\Accelerometer_data"  # Change this variable to set the base directory
+BASE_PATH = str(Path("~/Accelerometer_data").expanduser())  # Change this variable to set the base directory
 
 # Configuration
 #UDP_IP = "10.20.3.3"
 UDP_IP = "192.168.1.30" #Remote (MCU) IP
 UDP_PORT = 8
 #LISTEN_IP = "10.20.1.3"
-LISTEN_IP = "192.168.1.10" #Host (This PC) IPasdf
+LISTEN_IP = "192.168.1.10" #Host (This PC) IP
 LISTEN_PORT = 12345 #55151 #CHANGE IF ON SITE
 PACKET_SIZE = 601*2 + 42  # 600 bytes of data + 42 bytes UDP header
 
+SEPARATOR = b"\x89\xab\xcd\xef"
+EXPECTED_SAMPLES_PER_PACKET = 60
+
+# Long-lived CSV writer state
+FLUSH_PERIOD_SEC = 2.0           # periodic buffered flush cadence
+BUFFER_BYTES = 2 * 1024 * 1024   # 2 MB user-space buffer for the file
+FSYNC_PERIOD_SEC = 10.0   # force to disk this often so Explorer shows growth
 metadata_filename = os.path.join(BASE_PATH, "metadata_log.txt")
 
 # Prompt the user for a note at the start
@@ -55,12 +64,53 @@ folder_name = f"{timestamp}_cgem_accel"
 full_path = os.path.join(BASE_PATH, folder_name)
 os.makedirs(full_path, exist_ok=True)  # Create folder if it doesn't exist
 
-
-# Initial filename, file and packet index
 packet_idx = 0
 file_idx = 1
-filename = os.path.join(full_path, generate_filename(file_idx))
+current_file = None
+csv_writer = None
+last_flush = _now()
+last_fsync = _now()
 
+def open_new_file():
+    """Close current file (if any) with fsync, then open the next CSV with a large buffer."""
+    global current_file, csv_writer, filename, last_flush, file_idx
+    if current_file:
+        try:
+            current_file.flush()
+            os.fsync(current_file.fileno())
+        except Exception:
+            pass
+        current_file.close()
+
+    filename = os.path.join(full_path, generate_filename(file_idx))
+    # newline="" is correct for Python csv on Windows; large 'buffering' reduces syscalls
+    current_file = open(filename, mode="a", buffering=BUFFER_BYTES, newline="")
+    csv_writer = csv.writer(current_file)
+    last_flush = _now()
+    log.info(f"Writing to new file: {filename}")
+
+@atexit.register
+def _close_file_at_exit():
+    """Make sure the last file hits disk on normal exit or Ctrl+C."""
+    if current_file:
+        try:
+            current_file.flush()
+            os.fsync(current_file.fileno())
+        except Exception:
+            pass
+        current_file.close()
+    # Close socket
+    try:
+        if 'sock' in globals() and sock:
+            sock.close()
+            log.info("Closed UDP socket at exit")
+    except Exception:
+        pass        
+# Open the first CSV now so we can record its exact path in metadata
+open_new_file()
+
+def _ema(prev, x):
+    return x if prev is None else (1.0 - EMA_ALPHA) * prev + EMA_ALPHA * x
 # Initialize the metadata log
 with open(metadata_filename, "a") as meta_file:
     meta_file.write(f"folder path: {full_path}\n")
@@ -71,6 +121,16 @@ with open(metadata_filename, "a") as meta_file:
 protocol = socket.SOCK_DGRAM  # SOCK_DGRAM is for UDP
 ip_family = socket.AF_INET  # AF_INET is for ipv4
 sock = socket.socket(ip_family, protocol)
+# Increase UDP receive buffer (helps absorb brief pauses)
+try:
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, BUFFER_BYTES * 2)
+except Exception as e:
+    log.debug(f"SO_RCVBUF set failed: {e}")
+try:
+    actual_rcvbuf = sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
+    log.info(f"UDP recv buffer: {actual_rcvbuf} bytes")
+except Exception:
+    pass
 
 # Bind to the specific IP and port
 try:
@@ -88,9 +148,6 @@ def process_payload(payload):
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     current_time_ns = time.time_ns() % 1_000_000_000
     
-    SEPARATOR = b"\x89\xab\xcd\xef"
-    parts = payload.split(SEPARATOR)
-    EXPECTED_SAMPLES_PER_PACKET = 60
     parts = payload.split(SEPARATOR)
     # trailer after the last separator holds the 16-bit sampleNum (LE)
     tail = parts[-1] if parts else b""
@@ -150,11 +207,6 @@ def process_payload(payload):
     write.append(current_time)
     write.append(current_time_ns)
     
-    # Write the list of integers to the CSV file
-    with open(filename, mode="a", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(write)
-    
     log.debug(f"{len(write)} fields written to file. First value: {write[0]}")
 
     # ---- sample-rate tracking (simple per-period counters) ----
@@ -199,9 +251,7 @@ def process_payload(payload):
         else:
             tick_str = "n/a"
 
-        # EMA smoothing (simple, no deques)
-        def _ema(prev, x):
-            return x if prev is None else (1.0 - EMA_ALPHA) * prev + EMA_ALPHA * x
+        # EMA smoothing
         process_payload.sps_pkts_ema = _ema(process_payload.sps_pkts_ema, sps_pkts)
         process_payload.sps_wc_ema   = _ema(process_payload.sps_wc_ema,   sps_wc)
 
@@ -217,6 +267,7 @@ def process_payload(payload):
         process_payload.period_samples = 0
         process_payload.packets_period = 0
         process_payload.packet_drop_count = 0
+    return write
 
 # static vars
 process_payload.period_samples = 0
@@ -231,21 +282,38 @@ process_payload.prev_sample_num = None
 process_payload.packet_drop_count = 0
  
 # MAIN LOOP
+sock.settimeout(2.0)  # seconds
 try:
     while True:
-        sock.settimeout(2.0)  # seconds
         try:
             data, addr = sock.recvfrom(PACKET_SIZE)
+            log.debug(f"rx {len(data)} B from {addr}")
         except socket.timeout:
-            log.warning("No data received within 2 seconds.")
+            log.info("No data received within 2 seconds.")
+            continue
         #data, addr = sock.recvfrom(PACKET_SIZE)  # Receive packet
          #os.delay(1000)
-        log.debug(f"rx {len(data)} B from {addr}")
+
         if addr[0] == UDP_IP and addr[1] == UDP_PORT:
         #if addr[0] == UDP_IP:   # only check IP, not port
             data_payload = data[0:]  # UDP header is removed
-            process_payload(data_payload)  # Process the payload (function above)
+            row = process_payload(data_payload)  # Process the payload (function above)
+            if row is not None:
+                csv_writer.writerow(row)
             packet_idx += 1
+
+            # Periodic buffered flush
+            nowt = _now()
+            if (nowt - last_flush) >= FLUSH_PERIOD_SEC:
+                try:
+                    current_file.flush()
+                    if (nowt - last_fsync) >= FSYNC_PERIOD_SEC:
+                        os.fsync(current_file.fileno())  # tell OS to commit to disk
+                        last_fsync = nowt
+                except Exception as e:
+                    log.warning(f"flush/fsync failed: {e}")                    
+                last_flush = nowt
+
             if packet_idx == NUM_PACKETS_PER_FILE:
                 log.info("All packets processed for current file. Next file initialized.")
                 packet_idx = 0
@@ -253,12 +321,8 @@ try:
                 if NUM_FILES != -1 and file_idx >= NUM_FILES:
                     log.info("All specified files processed. Exiting...")
                     break
-                else:
-                    filename = os.path.join(full_path, generate_filename(file_idx))
-                    log.info(f"Writing to new file: {filename}")
+                open_new_file()
         else:
-            log.warning(f"Ignored packet from {addr}")  # Ignore packets from other addresses/ports
+            log.debug(f"Ignored packet from {addr}")  # Ignore packets from other addresses/ports
 except KeyboardInterrupt:
     log.info("Server stopped.")
-finally:
-    sock.close()
