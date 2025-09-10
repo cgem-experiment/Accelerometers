@@ -32,7 +32,7 @@ MCU_TICK_SEC = 1e-6
 
 NUM_PACKETS_PER_FILE = 26400 # Number of packets to write to each file
 NUM_FILES = -1  # Set to -1 for infinite, or specify the number of files 
-BASE_PATH = str(Path("~/Accelerometer_data").expanduser())  # Change this variable to set the base directory
+BASE_PATH = str(Path("~/accel_hk_data").expanduser())  # Change this variable to set the base directory
 
 # Configuration
 #UDP_IP = "10.20.3.3"
@@ -41,10 +41,22 @@ UDP_PORT = 8
 #LISTEN_IP = "10.20.1.3"
 LISTEN_IP = "192.168.1.10" #Host (This PC) IP
 LISTEN_PORT = 12345 #55151 #CHANGE IF ON SITE
-PACKET_SIZE = 601*2 + 42  # 600 bytes of data + 42 bytes UDP header
+#PACKET_SIZE = 601*2 + 42  # 600 bytes of data + 42 bytes UDP header
+PACKET_SIZE = 2048  # Maximum number of bytes to take from UDP packet
 
 SEPARATOR = b"\x89\xab\xcd\xef"
 EXPECTED_SAMPLES_PER_PACKET = 60
+
+# --- Housekeeping (HK) packet config ---
+HK_SYNC = b"HKPK"
+HK_VERSION = 1
+HK_NUM_CH = 11
+HK_PKT_SIZE = 8 + 4 + 4 + (2 * HK_NUM_CH)  # 38 bytes: header+seq+tick+channels
+
+# --- Accel packet header (matches MCU "ACCL" + v1) ---
+ACC_SYNC = b"ACCL"
+ACC_VERSION = 1
+ACC_HDR_LEN = 8  # 4 magic + 1 version + 3 pad
 
 # Long-lived CSV writer state
 FLUSH_PERIOD_SEC = 2.0           # periodic buffered flush cadence
@@ -61,20 +73,38 @@ else:
 
 # Take timestamp and define function for filenames
 timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+
+
 def generate_filename(file_idx):
     return f"{timestamp}_FILE{file_idx:04d}_cgem_accel.csv"
 
-# Create the folder
+def hk_generate_filename(file_idx):
+    return f"{timestamp}_FILE{file_idx:04d}_cgem_housekeeping.csv"
+
+# Create the folder (accel + housekeping)
 folder_name = f"{timestamp}_cgem_accel"
 full_path = os.path.join(BASE_PATH, folder_name)
 os.makedirs(full_path, exist_ok=True)  # Create folder if it doesn't exist
 
+hk_folder_name = f"{timestamp}_cgem_housekeeping"
+hk_full_path = os.path.join(BASE_PATH, hk_folder_name)
+os.makedirs(hk_full_path, exist_ok=True)
+
+# Accel writer state
 packet_idx = 0
 file_idx = 1
 current_file = None
 csv_writer = None
 last_flush = _now()
 last_fsync = _now()
+
+# Housekeeping writer state
+hk_packet_idx = 0
+hk_file_idx = 1
+hk_current_file = None
+hk_csv_writer = None
+hk_last_flush = _now()
+hk_last_fsync = _now()
 
 def open_new_file():
     """Close current file (if any) with fsync, then open the next CSV with a large buffer."""
@@ -94,6 +124,22 @@ def open_new_file():
     last_flush = _now()
     log.info(f"Writing to new file: {filename}")
 
+def open_new_hk_file():
+    """Rotate housekeeping CSV with big user-space buffer."""
+    global hk_current_file, hk_csv_writer, hk_filename, hk_last_flush, hk_file_idx
+    if hk_current_file:
+        try:
+            hk_current_file.flush()
+            os.fsync(hk_current_file.fileno())
+        except Exception:
+            pass
+        hk_current_file.close()
+    hk_filename = os.path.join(hk_full_path, hk_generate_filename(hk_file_idx))
+    hk_current_file = open(hk_filename, mode="a", buffering=BUFFER_BYTES, newline="")
+    hk_csv_writer = csv.writer(hk_current_file)
+    hk_last_flush = _now()
+    log.info(f"Writing housekeeping to: {hk_filename}")    
+
 @atexit.register
 def _close_file_at_exit():
     """Make sure the last file hits disk on normal exit or Ctrl+C."""
@@ -105,14 +151,23 @@ def _close_file_at_exit():
             pass
         current_file.close()
     # Close socket
+    if 'hk_current_file' in globals() and hk_current_file:
+        try:
+            hk_current_file.flush()
+            os.fsync(hk_current_file.fileno())
+        except Exception:
+            pass
+        hk_current_file.close()    
     try:
         if 'sock' in globals() and sock:
             sock.close()
             log.info("Closed UDP socket at exit")
     except Exception:
-        pass        
+        pass
+
 # Open the first CSV now so we can record its exact path in metadata
 open_new_file()
+open_new_hk_file()
 
 def _ema(prev, x):
     return x if prev is None else (1.0 - EMA_ALPHA) * prev + EMA_ALPHA * x
@@ -120,6 +175,8 @@ def _ema(prev, x):
 with open(metadata_filename, "a") as meta_file:
     meta_file.write(f"folder path: {full_path}\n")
     meta_file.write(f"initial file path: {filename}\n")
+    meta_file.write(f"housekeeping folder path: {hk_full_path}\n")
+    meta_file.write(f"initial housekeeping file path: {hk_filename}\n")    
     meta_file.write(f"Session note: {session_note}\n\n")
 
 # Configure ethernet socket
@@ -145,10 +202,10 @@ except OSError as e:
     log.error(f" Bind failed: {e}")
 
 # Print confirmation
-log.info(f"Listening for UDP packets from {UDP_IP}:{UDP_PORT} on port {LISTEN_PORT}...")
+log.info(f"Listening for UDP packets from {UDP_IP} on port {LISTEN_PORT}...")
 log.info(f"Folder created at {full_path}")
 
-def process_payload(payload):
+def process_payload(payload, addr):
 
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     current_time_ns = time.time_ns() % 1_000_000_000
@@ -163,6 +220,13 @@ def process_payload(payload):
         prev = getattr(process_payload, "prev_sample_num", None)
         if prev is not None:
             step = (sample_num - prev) & 0xFFFF
+            if step == 0:
+                process_payload.packet_drop_count += 1
+                log.warning(
+                    f"packet loss/reorder: sampleNum {prev} -> {sample_num} (Δ=0) "
+                    f"from {addr}"
+                )
+                return None
             if step != 1:
                 process_payload.packet_drop_count += 1
                 log.warning(f"packet loss/reorder: sampleNum {prev} -> {sample_num} (Δ={step})")
@@ -285,7 +349,20 @@ process_payload.sps_pkts_ema = None
 process_payload.sps_wc_ema   = None
 process_payload.prev_sample_num = None
 process_payload.packet_drop_count = 0
- 
+
+def process_hk_payload(payload):
+    # Expect: [sync(4)][ver(1)][pad(3)][seq u32][tick u32][11*uint16]
+    if len(payload) < HK_PKT_SIZE or payload[:4] != HK_SYNC or payload[4] != HK_VERSION:
+        return None
+    # Unpack without struct for portability/style
+    seq   = int.from_bytes(payload[8:12],  "little")
+    tick  = int.from_bytes(payload[12:16], "little")
+    chraw = [int.from_bytes(payload[16+2*i:18+2*i], "little") for i in range(HK_NUM_CH)]
+    now_txt = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    now_ns  = time.time_ns() % 1_000_000_000
+    # Row: seq, tick, 11 raw codes, host_time_str, host_time_ns
+    return [seq, tick, *chraw, now_txt, now_ns]
+
 # MAIN LOOP
 sock.settimeout(2.0)  # seconds
 try:
@@ -298,36 +375,57 @@ try:
             continue
         #data, addr = sock.recvfrom(PACKET_SIZE)  # Receive packet
          #os.delay(1000)
+        if addr[0] == UDP_IP:  # accept MCU regardless of source port; demux by content
+            data_payload = data  # already payload for user; we don't prepend headers in MCU
+            # 1) Housekeeping packets start with "HKPK"
+            if len(data_payload) >= 8 and data_payload[:4] == HK_SYNC:
+                hk_row = process_hk_payload(data_payload)
+                if hk_row is not None:
+                    hk_csv_writer.writerow(hk_row)
+                    hk_packet_idx += 1
+                    # buffered flush/fsync (same cadence as accel)
+                    nowt = _now()
+                    if (nowt - hk_last_flush) >= FLUSH_PERIOD_SEC:
+                        try:
+                            hk_current_file.flush()
+                            if (nowt - hk_last_fsync) >= FSYNC_PERIOD_SEC:
+                                os.fsync(hk_current_file.fileno())
+                                hk_last_fsync = nowt
+                        except Exception as e:
+                            log.warning(f"HK flush/fsync failed: {e}")
+                        hk_last_flush = nowt
+                    if hk_packet_idx == NUM_PACKETS_PER_FILE:
+                        log.info("HK file limit reached; rotating.")
+                        hk_packet_idx = 0
+                        hk_file_idx += 1
+                        open_new_hk_file()
 
-        if addr[0] == UDP_IP and addr[1] == UDP_PORT:
-        #if addr[0] == UDP_IP:   # only check IP, not port
-            data_payload = data[0:]  # UDP header is removed
-            row = process_payload(data_payload)  # Process the payload (function above)
-            if row is not None:
-                csv_writer.writerow(row)
-            packet_idx += 1
-
-            # Periodic buffered flush
-            nowt = _now()
-            if (nowt - last_flush) >= FLUSH_PERIOD_SEC:
-                try:
-                    current_file.flush()
-                    if (nowt - last_fsync) >= FSYNC_PERIOD_SEC:
-                        os.fsync(current_file.fileno())  # tell OS to commit to disk
-                        last_fsync = nowt
-                except Exception as e:
-                    log.warning(f"flush/fsync failed: {e}")                    
-                last_flush = nowt
-
-            if packet_idx == NUM_PACKETS_PER_FILE:
-                log.info("All packets processed for current file. Next file initialized.")
-                packet_idx = 0
-                file_idx += 1
-                if NUM_FILES != -1 and file_idx >= NUM_FILES:
-                    log.info("All specified files processed. Exiting...")
-                    break
-                open_new_file()
+            # 2) Else treat as accelerometer packet (existing path/format)
+            elif len(data_payload) >= ACC_HDR_LEN and data_payload[:4] == ACC_SYNC and data_payload[4] == ACC_VERSION:
+                # remove accel header and send rest to parser
+                row = process_payload(data_payload[ACC_HDR_LEN:], addr)
+                if row is not None:
+                    csv_writer.writerow(row)
+                packet_idx += 1
+                nowt = _now()
+                if (nowt - last_flush) >= FLUSH_PERIOD_SEC:
+                    try:
+                        current_file.flush()
+                        if (nowt - last_fsync) >= FSYNC_PERIOD_SEC:
+                            os.fsync(current_file.fileno())
+                            last_fsync = nowt
+                    except Exception as e:
+                        log.warning(f"flush/fsync failed: {e}")
+                    last_flush = nowt
+                if packet_idx == NUM_PACKETS_PER_FILE:
+                    log.info("All packets processed for current file. Next file initialized.")
+                    packet_idx = 0
+                    file_idx += 1
+                    if NUM_FILES != -1 and file_idx >= NUM_FILES:
+                        log.info("All specified files processed. Exiting...")
+                        break
+                    open_new_file()
         else:
-            log.debug(f"Ignored packet from {addr}")  # Ignore packets from other addresses/ports
+            log.debug(f"Ignored packet from {addr}")
 except KeyboardInterrupt:
     log.info("Server stopped.")

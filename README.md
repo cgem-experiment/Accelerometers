@@ -3,7 +3,8 @@
 -The Nucleo/MCU board is now wired to be powered from the same 7-9VDC as the ADC board, if flashing firmware without this power active (USB only), move jumper JP2 from VIN to STLINK.
 -There is no longer a need to comment out any auto-generated CubeMX code when changing the .ioc
 -Data rate has been tested up to max 10kSPS (3.33kHz per axis)
--
+-The 8MHz clock on this particular board is 1% fast, which causes MCU timestamps for AD7177 data to have 1% larger interval than expected. The actual sample rate is 10kSPS within 0.1%
+
 
 # Accelerometers
 
