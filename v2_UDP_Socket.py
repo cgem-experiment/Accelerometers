@@ -7,6 +7,7 @@ import os
 import logging
 from pathlib import Path
 import atexit
+import sys
 
 
 # -----------------------------
@@ -24,7 +25,7 @@ _now = time.perf_counter
 # ---- Sample-rate display tuning ----
 # How often to print the rate
 RATE_REPORT_PERIOD_SEC = 1.0
-# Exponential moving average smoothing (0<α≤1). α≈0.2 ≈ ~5s if reports are ~1s.
+# Exponential moving average smoothing
 EMA_ALPHA = 0.1
 
 MCU_TICK_SEC = 1e-6
@@ -51,8 +52,12 @@ BUFFER_BYTES = 2 * 1024 * 1024   # 2 MB user-space buffer for the file
 FSYNC_PERIOD_SEC = 10.0   # force to disk this often so Explorer shows growth
 metadata_filename = os.path.join(BASE_PATH, "metadata_log.txt")
 
-# Prompt the user for a note at the start
-session_note = input("Notes: ")
+if sys.stdin.isatty():
+    # Interactive terminal: ask the user
+    session_note = input("Notes: ")
+else:
+    # Non-interactive (e.g. running under systemd)
+    session_note = ""
 
 # Take timestamp and define function for filenames
 timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")

@@ -54,6 +54,13 @@ MEMORY
 /* Define output sections */
 SECTIONS
 {
+  /* .RAM_D3: user-placed DMA buffers for BDMA (SRAM4) */
+  .RAM_D3 (NOLOAD) :
+  {
+    . = ALIGN(32);
+    KEEP(*(.RAM_D3*))     /* keep anything attributed to .RAM_D3 */
+    . = ALIGN(32);
+  } > RAM_D3
   /* The startup code goes first into FLASH */
   .isr_vector :
   {

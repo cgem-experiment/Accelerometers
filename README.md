@@ -1,4 +1,11 @@
-﻿# Accelerometers
+﻿# Elab Notes in addition to below
+-Network/IP settings are now in /core/inc/net_config.h
+-The Nucleo/MCU board is now wired to be powered from the same 7-9VDC as the ADC board, if flashing firmware without this power active (USB only), move jumper JP2 from VIN to STLINK.
+-There is no longer a need to comment out any auto-generated CubeMX code when changing the .ioc
+-Data rate has been tested up to max 10kSPS (3.33kHz per axis)
+-
+
+# Accelerometers
 
 
 1. **AD7177_H723ZG_20250218_v2**  

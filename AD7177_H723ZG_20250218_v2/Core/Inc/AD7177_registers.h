@@ -68,7 +68,8 @@
 #define AD7177_FILTCON0			  0x0007 //For 2500 sps 0x0009, for 10000 sps 0x0007
 
 //ADC Mode
-#define AD7177_ADCMODE		  	  0x0000 //have this on 0x8000 to enable 2.5 V reference, 0x0000 to use external reference
+//#define AD7177_ADCMODE		  	  0x0000 //have this on 0x8000 to enable 2.5 V reference, 0x0000 to use external reference
+#define AD7177_ADCMODE		  	  0x000C //have this on 0x8000 to enable 2.5 V reference, 0x0000 to use external reference, 0x000C to use external ref and external xtal
 
 //IF Mode
 #define AD7177_IFMODE			  0x0040
