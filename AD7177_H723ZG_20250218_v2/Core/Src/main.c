@@ -84,13 +84,6 @@ const osThreadAttr_t ethernetTask_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityHigh,
 };
-/* Definitions for hkTask */
-osThreadId_t hkTaskHandle;
-const osThreadAttr_t hkTask_attributes = {
-  .name = "hkTask",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityBelowNormal,
-};
 /* USER CODE BEGIN PV */
 //PUT SETUP STUFF HERE
 uint16_t spiData[700];
@@ -123,13 +116,15 @@ typedef struct {
   uint8_t  sync[4];     // "ACCL"
   uint8_t  version;     // e.g. 1
   uint8_t  reserved[3]; // pad to 8B
-  // xisting payload follows (spiData[0..600])
+  // existing payload follows (spiData[0..600])
 } __attribute__((packed)) accel_hdr_t;
 
 static volatile hk_snapshot_t g_hk_latest;   // written in ISR, read by task
 static uint32_t g_hk_seq = 0;                // 10 Hz packet sequence
 
 volatile bool g_init_done = false;
+volatile bool g_acc_send_req = false;
+volatile bool g_hk_send_req = false;
 
 volatile uint16_t spiIndex = 0;
 volatile uint32_t sampleNum = 0;
@@ -160,7 +155,6 @@ static void MX_TIM3_Init(void);
 static void MX_ADC3_Init(void);
 void StartDefaultTask(void *argument);
 void startEthernetTask(void *argument);
-void startHkTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 uint32_t AD7177_ReadRegister(uint8_t reg, uint8_t num_bytes);
@@ -258,9 +252,6 @@ int main(void)
 
   /* creation of ethernetTask */
   ethernetTaskHandle = osThreadNew(startEthernetTask, NULL, &ethernetTask_attributes);
-
-  /* creation of hkTask */
-  hkTaskHandle = osThreadNew(startHkTask, NULL, &hkTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -975,9 +966,10 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
       g_hk_latest.ch[i] = adc3_dma_buf[i];
     }
 
-    // Wake the housekeeping task exactly once per scan
+    // Wake the ethernet task exactly once per scan
+    g_hk_send_req = true;
     BaseType_t hpw = pdFALSE;
-    vTaskNotifyGiveFromISR(hkTaskHandle, &hpw);
+    vTaskNotifyGiveFromISR(ethernetTaskHandle, &hpw);
     portYIELD_FROM_ISR(hpw);
 
     HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
@@ -1060,7 +1052,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 	      spiData[spiIndex] = sampleNum;
 	      sampleNum++;
 	      spiIndex++;
-
+	      g_acc_send_req = true;
 	      BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	      vTaskNotifyGiveFromISR(ethernetTaskHandle, &xHigherPriorityTaskWoken); // function will set xHigherPriorityTaskWoken to pdTRUE if the unblocked task (ethernetTaskHandle) has a higher priority than the currently running task. Also unblocks task
 	      portYIELD_FROM_ISR(xHigherPriorityTaskWoken); // if xHigherPriorityTaskWoken is pdTURE, scheduler will switch to the ethernetTaskHandle task as soon as the ISR completes. Otherwise, currently running task will continue to run after ISR completes
@@ -1072,6 +1064,15 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
       NVIC_ClearPendingIRQ(EXTI9_5_IRQn);
       NVIC_EnableIRQ(EXTI9_5_IRQn);
     }
+}
+
+void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
+{
+  if (hspi->Instance == SPI1) {
+    __HAL_GPIO_EXTI_CLEAR_FLAG(GPIO_PIN_8);
+    NVIC_ClearPendingIRQ(EXTI9_5_IRQn);
+    NVIC_EnableIRQ(EXTI9_5_IRQn);
+  }
 }
 
 void AD7177_WriteRegister(uint8_t reg, uint32_t value, uint8_t num_bytes){
@@ -1204,85 +1205,11 @@ void startEthernetTask(void *argument)
   // Start timer 2 with 1ms interrupts
   HAL_TIM_Base_Start_IT(&htim2);
 
-
   initializeAD7177Board();
   g_init_done = true;
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET); // pull CS low
 
   HAL_NVIC_EnableIRQ(EXTI9_5_IRQn); // enable interrupt for shared DOUT/RDY pin
-
-
-
-  for (;;)
-    {
-      // wait for notification from the SPI callback function when a full packet is ready
-      ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-      while (ulTaskNotifyTake(pdTRUE, 0)) { /* discard extras */ }
-
-      // Copy samples from spiData to tempBuffer
-      memcpy(tempBuffer, spiData, sizeof(tempBuffer));
-
-      // Duplicate guard, if sampleNum at word 600 hasn't advanced, skip this packet
-      uint16_t this_sample = tempBuffer[600];
-      if (this_sample == last_sent_sample) {
-        // Still do the housekeeping shift so the ring stays consistent
-        memmove(spiData, &spiData[601], sizeof(spiData) - sizeof(tempBuffer));
-        spiIndex -= 601;
-        continue;
-      }
-      last_sent_sample = this_sample;
-
-      // Send the data over Ethernet
-      udp_buffer = pbuf_alloc(PBUF_TRANSPORT, sizeof(accel_hdr_t) + sizeof(tempBuffer), PBUF_RAM);
-      if (udp_buffer != NULL)
-	{
-	  //Add the ID header
-	  accel_hdr_t hdr;
-	  memcpy(hdr.sync, ACCEL_SYNC_STR, 4);
-	  hdr.version = ACCEL_VERSION;
-	  memset(hdr.reserved, 0, sizeof(hdr.reserved));
-
-	  memcpy(udp_buffer->payload, &hdr, sizeof(hdr));
-	  memcpy((uint8_t*)udp_buffer->payload + sizeof(hdr), tempBuffer, sizeof(tempBuffer));
-
-	  udp_send(my_udp, udp_buffer);
-	  pbuf_free(udp_buffer);
-	}
-
-      // Shift the remaining samples up in the spiData buffer (pointer to dest, pointer to source, number of bytes)
-      memmove(spiData, &spiData[601], sizeof(spiData) - sizeof(tempBuffer));
-
-      // Update spiIndex to reflect the new starting position
-      spiIndex -= 601;
-
-      osDelay(1);
-    }
-  /* USER CODE END startEthernetTask */
-}
-
-/* USER CODE BEGIN Header_startHkTask */
-/**
-* @brief Function implementing the hkTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_startHkTask */
-void startHkTask(void *argument)
-{
-  /* USER CODE BEGIN startHkTask */
-  /* Infinite loop */
-  // Wait until the netif is up so we can send
-  extern struct netif gnetif;
-  while (!netif_is_up(&gnetif)) { osDelay(1); }
-
-  // Destination IP
-  ip_addr_t pc_ip;
-  IP_ADDR4(&pc_ip, NET_PCIP0, NET_PCIP1, NET_PCIP2, NET_PCIP3);
-
-  // Separate UDP PCB and ports for housekeeping
-  struct udp_pcb* hk_udp = udp_new();
-  udp_bind(hk_udp, IP_ADDR_ANY, NET_HK_SRC_PORT);
-  udp_connect(hk_udp, &pc_ip, NET_HK_DST_PORT);
 
   hk_pkt_t pkt;
   memcpy(pkt.sync, HK_SYNC_STR, 4);
@@ -1302,36 +1229,88 @@ void startHkTask(void *argument)
   }
 
   for (;;)
-  {
-    // Block until ADC3 DMA-complete posts a notify
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    {
+      // wait for notification from the SPI callback function when a full packet is ready
+      ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    // Drain any coalesced notifies to send one freshest sample
-    while (ulTaskNotifyTake(pdTRUE, 0)) { /* discard extras */ }
+      // Handle any backlog before re-blocking
+      while (g_acc_send_req || g_hk_send_req)
+	{
+	  if(g_acc_send_req)
+	    {
+	      g_acc_send_req = false;
+	      // Copy samples from spiData to tempBuffer
+	      memcpy(tempBuffer, spiData, sizeof(tempBuffer));
 
-    // Snapshot the volatile structure
-    hk_snapshot_t snap;
-    snap.tick32 = g_hk_latest.tick32;
-    for (uint32_t i = 0; i < ADC3_SCAN_LEN; i++) {
-      snap.ch[i] = g_hk_latest.ch[i];
+	      // Duplicate guard, if sampleNum at word 600 hasn't advanced, skip this packet
+	      uint16_t this_sample = tempBuffer[600];
+	      if (this_sample == last_sent_sample) {
+		  // Still do the housekeeping shift so the ring stays consistent
+		  memmove(spiData, &spiData[601], sizeof(spiData) - sizeof(tempBuffer));
+		  spiIndex -= 601;
+		  continue;
+	      }
+	      last_sent_sample = this_sample;
+
+	      // Send the data over Ethernet
+	      udp_buffer = pbuf_alloc(PBUF_TRANSPORT, sizeof(accel_hdr_t) + sizeof(tempBuffer), PBUF_RAM);
+	      if (udp_buffer != NULL)
+		{
+		  //Add the ID header
+		  accel_hdr_t hdr;
+		  memcpy(hdr.sync, ACCEL_SYNC_STR, 4);
+		  hdr.version = ACCEL_VERSION;
+		  memset(hdr.reserved, 0, sizeof(hdr.reserved));
+
+		  memcpy(udp_buffer->payload, &hdr, sizeof(hdr));
+		  memcpy((uint8_t*)udp_buffer->payload + sizeof(hdr), tempBuffer, sizeof(tempBuffer));
+
+		  udp_send(my_udp, udp_buffer);
+		  pbuf_free(udp_buffer);
+		}
+
+	      // Shift the remaining samples up in the spiData buffer (pointer to dest, pointer to source, number of bytes)
+	      memmove(spiData, &spiData[601], sizeof(spiData) - sizeof(tempBuffer));
+
+	      // Update spiIndex to reflect the new starting position
+	      spiIndex -= 601;
+
+	      osDelay(1);
+	    }
+	  if(g_hk_send_req)
+	    {
+	      g_hk_send_req = false;
+	      // Snapshot the volatile structure
+	      hk_snapshot_t snap;
+	      snap.tick32 = g_hk_latest.tick32;
+	      for (uint32_t i = 0; i < ADC3_SCAN_LEN; i++) {
+		  snap.ch[i] = g_hk_latest.ch[i];
+	      }
+
+	      // Build packet
+	      pkt.seq    = g_hk_seq++;
+	      pkt.tick32 = snap.tick32;
+	      for (uint32_t i = 0; i < ADC3_SCAN_LEN; i++) {
+		  pkt.ch[i] = snap.ch[i];
+	      }
+
+	      // Send one packet per scan
+	      struct pbuf* pb = pbuf_alloc(PBUF_TRANSPORT, sizeof(pkt), PBUF_RAM);
+	      if (pb) {
+		  memcpy(pb->payload, &pkt, sizeof(pkt));
+		  udp_send(my_udp, pb);
+		  pbuf_free(pb);
+	      }
+	    }
+	  // If more notifies stacked while we were sending, consume them now
+	  if (ulTaskNotifyTake(pdTRUE, 0)) {
+	      // loop again with current flags (which ISRs may have set)
+	      continue;
+	  }
+	}
+
     }
-
-    // Build packet
-    pkt.seq    = g_hk_seq++;
-    pkt.tick32 = snap.tick32;
-    for (uint32_t i = 0; i < ADC3_SCAN_LEN; i++) {
-      pkt.ch[i] = snap.ch[i];
-    }
-
-    // Send one packet per scan
-    struct pbuf* pb = pbuf_alloc(PBUF_TRANSPORT, sizeof(pkt), PBUF_RAM);
-    if (pb) {
-      memcpy(pb->payload, &pkt, sizeof(pkt));
-      udp_send(hk_udp, pb);
-      pbuf_free(pb);
-    }
-  }
-  /* USER CODE END startHkTask */
+  /* USER CODE END startEthernetTask */
 }
 
  /* MPU Configuration */

@@ -4,6 +4,16 @@
 -There is no longer a need to comment out any auto-generated CubeMX code when changing the .ioc
 -Data rate has been tested up to max 10kSPS (3.33kHz per axis)
 -The 8MHz clock on this particular board is 1% fast, which causes MCU timestamps for AD7177 data to have 1% larger interval than expected. The actual sample rate is 10kSPS within 0.1%
+-Added second packet type for housekeeping data
+
+Each row in the housekeeping (*_cgem_housekeeping.csv) files corresponds to one housekeeping packet received at 10 Hz. The MCU inserts a small binary header ("HKPK") that the Python script parses into structured CSV fields.
+
+Columns per row:
+seq — 32-bit sequence counter (increments by 1 each packet, wraps at 2^32).
+tick — 32-bit MCU timer snapshot (TIM23 counter value when the ADC scan completed).
+ch0 … ch10 — raw 12-bit ADC codes from the housekeeping scan (11 channels).
+host_time_str — human-readable timestamp when the packet was received (wall clock).
+host_time_ns — nanoseconds part of the host time (0–999 999 999).
 
 
 # Accelerometers

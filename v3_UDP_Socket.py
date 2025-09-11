@@ -13,7 +13,7 @@ import sys
 # -----------------------------
 # Logging configuration
 # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
-LOG_LEVEL = "INFO"
+LOG_LEVEL = "WARNING"
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL),
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -37,7 +37,7 @@ BASE_PATH = str(Path("~/accel_hk_data").expanduser())  # Change this variable to
 # Configuration
 #UDP_IP = "10.20.3.3"
 UDP_IP = "192.168.1.30" #Remote (MCU) IP
-UDP_PORT = 8
+#UDP_PORT = 8
 #LISTEN_IP = "10.20.1.3"
 LISTEN_IP = "192.168.1.10" #Host (This PC) IP
 LISTEN_PORT = 12345 #55151 #CHANGE IF ON SITE
@@ -223,16 +223,16 @@ def process_payload(payload, addr):
             if step == 0:
                 process_payload.packet_drop_count += 1
                 log.warning(
-                    f"packet loss/reorder: sampleNum {prev} -> {sample_num} (Δ=0) "
+                    f"Accel packet duplicate: sampleNum {prev} -> {sample_num} (Δ=0) "
                     f"from {addr}"
                 )
                 return None
             if step != 1:
                 process_payload.packet_drop_count += 1
-                log.warning(f"packet loss/reorder: sampleNum {prev} -> {sample_num} (Δ={step})")
+                log.warning(f"Accel packet loss/reorder: sampleNum {prev} -> {sample_num} (Δ={step})")
         process_payload.prev_sample_num = sample_num
     if len(samples_bytes) != EXPECTED_SAMPLES_PER_PACKET:
-        log.warning(f"packet had {len(samples_bytes)} samples; trailing tail={len(tail)}B")
+        log.warning(f"Accel packet had {len(samples_bytes)} samples; trailing tail={len(tail)}B")
     
     value0_array = []
     value1_array = []
@@ -356,12 +356,27 @@ def process_hk_payload(payload):
         return None
     # Unpack without struct for portability/style
     seq   = int.from_bytes(payload[8:12],  "little")
+    # Detect dropped/reordered HK packets via seq
+    prev = getattr(process_hk_payload, "prev_seq", None)
+    if prev is not None:
+        step = (seq - prev) & 0xFFFFFFFF  # wrap-safe for 32-bit
+        if step == 0:
+            process_hk_payload.packet_drop_count += 1
+            log.warning(f"HK packet duplicate: seq {prev} -> {seq} (Δ=0)")
+            return None
+        elif step != 1:
+            process_hk_payload.packet_drop_count += 1
+            log.warning(f"HK packet loss/reorder: seq {prev} -> {seq} (Δ={step})")
+    process_hk_payload.prev_seq = seq    
     tick  = int.from_bytes(payload[12:16], "little")
     chraw = [int.from_bytes(payload[16+2*i:18+2*i], "little") for i in range(HK_NUM_CH)]
     now_txt = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     now_ns  = time.time_ns() % 1_000_000_000
     # Row: seq, tick, 11 raw codes, host_time_str, host_time_ns
     return [seq, tick, *chraw, now_txt, now_ns]
+
+process_hk_payload.prev_seq = None
+process_hk_payload.packet_drop_count = 0
 
 # MAIN LOOP
 sock.settimeout(2.0)  # seconds
@@ -378,7 +393,7 @@ try:
         if addr[0] == UDP_IP:  # accept MCU regardless of source port; demux by content
             data_payload = data  # already payload for user; we don't prepend headers in MCU
             # 1) Housekeeping packets start with "HKPK"
-            if len(data_payload) >= 8 and data_payload[:4] == HK_SYNC:
+            if len(data_payload) >= 8 and data_payload[:4] == HK_SYNC and data_payload[4] == HK_VERSION:
                 hk_row = process_hk_payload(data_payload)
                 if hk_row is not None:
                     hk_csv_writer.writerow(hk_row)
