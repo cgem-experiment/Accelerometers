@@ -1,4 +1,5 @@
-#v2_UDP_Socket
+#!/usr/bin/env python3
+#v3_UDP_Socket
 import socket
 import csv  
 from datetime import datetime  
@@ -173,8 +174,8 @@ def _ema(prev, x):
     return x if prev is None else (1.0 - EMA_ALPHA) * prev + EMA_ALPHA * x
 # Initialize the metadata log
 with open(metadata_filename, "a") as meta_file:
-    meta_file.write(f"folder path: {full_path}\n")
-    meta_file.write(f"initial file path: {filename}\n")
+    meta_file.write(f"accel folder path: {full_path}\n")
+    meta_file.write(f"accel initial file path: {filename}\n")
     meta_file.write(f"housekeeping folder path: {hk_full_path}\n")
     meta_file.write(f"initial housekeeping file path: {hk_filename}\n")    
     meta_file.write(f"Session note: {session_note}\n\n")

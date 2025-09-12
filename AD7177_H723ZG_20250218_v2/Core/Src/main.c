@@ -47,6 +47,8 @@
 #define ACCEL_SYNC_STR "ACCL"
 #define ACCEL_VERSION  1
 
+#define PKT_WORDS 601
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -86,8 +88,14 @@ const osThreadAttr_t ethernetTask_attributes = {
 };
 /* USER CODE BEGIN PV */
 //PUT SETUP STUFF HERE
-uint16_t spiData[700];
-uint16_t tempBuffer[601];
+
+// Ping-pong packet buffers: each packet is 601 uint16_t words
+#define PKT_WORDS 601
+static uint16_t pkt_buf[2][PKT_WORDS];
+static volatile uint8_t write_buf = 0;      // ISR writes into this buffer (0 or 1)
+static volatile uint8_t ready_buf = 0xFF;   // Published by ISR when a packet is complete
+static volatile uint16_t accum_words = 0;   // Words accumulated in current write_buf
+
 uint8_t rxBuffer24bit[5];
 static uint8_t g_txBuffer24bit_IT[5] = {AD7177_READ_DATA_REG, 0,0,0,0 };
 // --- ADC3 ← DMA target buffer (one regular sequence worth of samples) ---
@@ -125,8 +133,8 @@ static uint32_t g_hk_seq = 0;                // 10 Hz packet sequence
 volatile bool g_init_done = false;
 volatile bool g_acc_send_req = false;
 volatile bool g_hk_send_req = false;
+volatile bool g_spi_inflight = false;
 
-volatile uint16_t spiIndex = 0;
 volatile uint32_t sampleNum = 0;
 
 volatile uint32_t channel_data[4] = {0};      // Holds raw ADC values
@@ -136,7 +144,6 @@ volatile uint32_t timer23val;
 
 uint8_t resetSequence[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-uint8_t packet_ready = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -988,18 +995,23 @@ void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
 // EXTI Line8 External Interrupt ISR Handler CallBackFun
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  if(GPIO_Pin == GPIO_PIN_8) // If The interrupt Source Is EXTI Line8 (PB8 Pin), which means that fresh data is ready
-    {
-      if(g_init_done)
-	{
-	  // Prevent EXTI from retriggering during the SPI transfer
-	  NVIC_DisableIRQ(EXTI9_5_IRQn);
-	  HAL_SPI_TransmitReceive_IT(&hspi1, g_txBuffer24bit_IT, (uint8_t *)rxBuffer24bit, 5); // read the data register and trigger SPI callback function
-	  timer23val = __HAL_TIM_GET_COUNTER(&htim23);
-	}
-    }
-}
+  if (GPIO_Pin == GPIO_PIN_8 && g_init_done) {
+    if (g_spi_inflight) return; // drop edge; SPI still busy
+    g_spi_inflight = true;
 
+    NVIC_DisableIRQ(EXTI9_5_IRQn);
+    HAL_StatusTypeDef rc = HAL_SPI_TransmitReceive_IT(&hspi1, g_txBuffer24bit_IT,
+                                                      (uint8_t *)rxBuffer24bit, 5);
+    if (rc != HAL_OK) {
+      g_spi_inflight = false;
+      __HAL_GPIO_EXTI_CLEAR_FLAG(GPIO_PIN_8);
+      NVIC_ClearPendingIRQ(EXTI9_5_IRQn);
+      NVIC_EnableIRQ(EXTI9_5_IRQn);   // don't stay masked on failure
+      return;
+    }
+    timer23val = __HAL_TIM_GET_COUNTER(&htim23);
+  }
+}
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
   if (hspi->Instance == SPI1)
@@ -1028,37 +1040,39 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 	  // Clear ready flags
 	  for (int i = 0; i < NUM_CH_ENABLED; i++) channel_ready[i] = 0;
 
-	  // Fill spiData
-	  for (int i = 0; i < NUM_CH_ENABLED; i++) {
-	      spiData[spiIndex + (i * 2)]     = channel_data[i] & 0xFFFF; // bits 15:0
-	      spiData[spiIndex + (i * 2) + 1] = (channel_data[i] >> 16) << 8 | i; // bits 23:16 + channel id
-	  }
+	  uint16_t *dst = &pkt_buf[write_buf][accum_words];
 
+
+          // 3 channels -> 6 words
+          for (int i = 0; i < NUM_CH_ENABLED; i++) {
+              dst[i*2 + 0] = (uint16_t)(channel_data[i] & 0xFFFF);
+              dst[i*2 + 1] = (uint16_t)(((channel_data[i] >> 16) & 0xFF) << 8) | (uint16_t)i;
+          }
 	  // Add timestamp
-	  spiData[spiIndex + 6]  = timer23val & 0xFFFF;
-	  spiData[spiIndex + 7]  = (timer23val >> 16) & 0xFFFF;
+          dst[6] = (uint16_t)(timer23val & 0xFFFF);
+          dst[7] = (uint16_t)((timer23val >> 16) & 0xFFFF);
 
 	  //spacers (may change this later)
-	  spiData[spiIndex + 8] = 0xAB89;
-	  spiData[spiIndex + 9] = 0xEFCD;
+          dst[8] = 0xAB89;
+          dst[9] = 0xEFCD;
 
-	  // Advance index
-	  spiIndex += 10;
+          accum_words += 10;
 
-	  if (spiIndex >= 700) {
-	      spiIndex = 0;
-	  }
-	  else if (spiIndex == 600) { // packet is ready
-	      spiData[spiIndex] = sampleNum;
+          if (accum_words == 600) { // packet is ready
+              pkt_buf[write_buf][600] = (uint16_t)(sampleNum & 0xFFFF);
 	      sampleNum++;
-	      spiIndex++;
+
+	      uint8_t just_filled = write_buf;
+	      write_buf ^= 1;           // flip for next accumulation
+	      accum_words = 0;          // reset for new write_buf
+	      ready_buf = just_filled;  // publish which buffer is ready
 	      g_acc_send_req = true;
 	      BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	      vTaskNotifyGiveFromISR(ethernetTaskHandle, &xHigherPriorityTaskWoken); // function will set xHigherPriorityTaskWoken to pdTRUE if the unblocked task (ethernetTaskHandle) has a higher priority than the currently running task. Also unblocks task
 	      portYIELD_FROM_ISR(xHigherPriorityTaskWoken); // if xHigherPriorityTaskWoken is pdTURE, scheduler will switch to the ethernetTaskHandle task as soon as the ISR completes. Otherwise, currently running task will continue to run after ISR completes
 	  }
       }
-
+      g_spi_inflight = false;
       __HAL_GPIO_EXTI_CLEAR_FLAG(GPIO_PIN_8);   // clear EXTI line pending
       //Re-enable EXTI IRQ for the next clean edge
       NVIC_ClearPendingIRQ(EXTI9_5_IRQn);
@@ -1069,6 +1083,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
 {
   if (hspi->Instance == SPI1) {
+    g_spi_inflight = false;
     __HAL_GPIO_EXTI_CLEAR_FLAG(GPIO_PIN_8);
     NVIC_ClearPendingIRQ(EXTI9_5_IRQn);
     NVIC_EnableIRQ(EXTI9_5_IRQn);
@@ -1239,43 +1254,36 @@ void startEthernetTask(void *argument)
 	  if(g_acc_send_req)
 	    {
 	      g_acc_send_req = false;
-	      // Copy samples from spiData to tempBuffer
-	      memcpy(tempBuffer, spiData, sizeof(tempBuffer));
+	      // Consume the published ping-pong buffer (if any)
+	      uint8_t rb = ready_buf;
+	      if (rb <= 1) {
+	          // Duplicate guard using the stamped sample number at word 600
+	          uint16_t this_sample = pkt_buf[rb][600];
+	          if (this_sample != last_sent_sample) {
+	              last_sent_sample = this_sample;
 
-	      // Duplicate guard, if sampleNum at word 600 hasn't advanced, skip this packet
-	      uint16_t this_sample = tempBuffer[600];
-	      if (this_sample == last_sent_sample) {
-		  // Still do the housekeeping shift so the ring stays consistent
-		  memmove(spiData, &spiData[601], sizeof(spiData) - sizeof(tempBuffer));
-		  spiIndex -= 601;
-		  continue;
+	              // Send the data over Ethernet: header + 601 words from pkt_buf[rb]
+	              udp_buffer = pbuf_alloc(PBUF_TRANSPORT,
+	                                      sizeof(accel_hdr_t) + sizeof(pkt_buf[0]),
+	                                      PBUF_RAM);
+	              if (udp_buffer != NULL)
+	              {
+	                  accel_hdr_t hdr;
+	                  memcpy(hdr.sync, ACCEL_SYNC_STR, 4);
+	                  hdr.version = ACCEL_VERSION;
+	                  memset(hdr.reserved, 0, sizeof(hdr.reserved));
+
+	                  memcpy(udp_buffer->payload, &hdr, sizeof(hdr));
+	                  memcpy((uint8_t*)udp_buffer->payload + sizeof(hdr),
+	                         pkt_buf[rb], sizeof(pkt_buf[rb]));
+
+	                  udp_send(my_udp, udp_buffer);
+	                  pbuf_free(udp_buffer);
+	              }
+	          }
+	          // mark consumed regardless; ISR will republish next full buffer
+	          ready_buf = 0xFF;
 	      }
-	      last_sent_sample = this_sample;
-
-	      // Send the data over Ethernet
-	      udp_buffer = pbuf_alloc(PBUF_TRANSPORT, sizeof(accel_hdr_t) + sizeof(tempBuffer), PBUF_RAM);
-	      if (udp_buffer != NULL)
-		{
-		  //Add the ID header
-		  accel_hdr_t hdr;
-		  memcpy(hdr.sync, ACCEL_SYNC_STR, 4);
-		  hdr.version = ACCEL_VERSION;
-		  memset(hdr.reserved, 0, sizeof(hdr.reserved));
-
-		  memcpy(udp_buffer->payload, &hdr, sizeof(hdr));
-		  memcpy((uint8_t*)udp_buffer->payload + sizeof(hdr), tempBuffer, sizeof(tempBuffer));
-
-		  udp_send(my_udp, udp_buffer);
-		  pbuf_free(udp_buffer);
-		}
-
-	      // Shift the remaining samples up in the spiData buffer (pointer to dest, pointer to source, number of bytes)
-	      memmove(spiData, &spiData[601], sizeof(spiData) - sizeof(tempBuffer));
-
-	      // Update spiIndex to reflect the new starting position
-	      spiIndex -= 601;
-
-	      osDelay(1);
 	    }
 	  if(g_hk_send_req)
 	    {

@@ -30,8 +30,7 @@
 #define NET_PCIP3     10
 
 // UDP ports
-#define NET_ACCEL_SRC_PORT  40001       // Accelerometer data (high rate) source (MCU) port
-#define NET_HK_SRC_PORT (NET_ACCEL_SRC_PORT + 1) //Housekeeping data source (MCU) port
+#define NET_ACCEL_SRC_PORT  40001       // Source (MCU) port
 
-#define NET_ACCEL_DST_PORT  12345   // Accelerometer data destination (PC) port
-#define NET_HK_DST_PORT NET_ACCEL_DST_PORT // Housekeeping data destination (PC) port, use same port for now and filter by SYNC
+
+#define NET_ACCEL_DST_PORT  12345   // Destination (PC) port
