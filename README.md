@@ -1,5 +1,7 @@
 ﻿# Elab Notes in addition to below
 -Enabled internal 2.5Vref (measured 2.499V) buffer for internal ADC, R36 must be removed from nucleo board to disconnect Vref from VDD
+-On AD7177-2 ADC Eval board, populate SL5-B to bring 3v3 to IOVDD header, for Accelerometer 3v3
+-Move Accelerometer GND to ADC board J6-8 
 -Network/IP settings are now in /core/inc/net_config.h
 -The Nucleo/MCU board is now wired to be powered from the same 7-9VDC as the ADC board, if flashing firmware without this power active (USB only), move jumper JP2 from VIN to STLINK.
 -There is no longer a need to comment out any auto-generated CubeMX code when changing the .ioc
@@ -15,6 +17,22 @@ tick — 32-bit MCU microsecond timer snapshot (TIM23 counter value when the ADC
 ch0 … ch10 — raw 12-bit ADC codes from the housekeeping scan (11 channels).
 host_time_str — human-readable timestamp when the packet was received (wall clock).
 host_time_ns — nanoseconds part of the host time (0–999 999 999).
+
+The 11 ADC Channels are sampled in the following rank/sequence:
+
+| Rank | ADC Channel | MCU Pin | Zio Label | Connector / Pin | 10c Ribbon Cable Colour | Notes
+| ---- | ----------- | ------- | --------- | --------------- | ----------------------- | ------------------
+| 1    | 10          | PC0     | **A1**    | CN9 / pin 3     | Brown                   | 6.49k//10uF to GND
+| 2    | 0           | PC2\_C  | **A4**    | CN9 / pin 9     | Red                     | 6.49k//10uF to GND
+| 3    | 6           | PF10    | **A5**    | CN9 / pin 11    | Orange                  | 6.49k//10uF to GND
+| 4    | 9           | PF4     | **A6**    | CN10 / pin 7    | Yellow                  | 6.49k//10uF to GND
+| 5    | 4           | PF5     | **A7**    | CN10 / pin 9    | Green                   | 6.49k//10uF to GND
+| 6    | 8           | PF6     | **A8**    | CN10 / pin 11   | Blue                    | 6.49k//10uF to GND
+| 7    | 5           | PF3     | **D8**    | CN7 / pin 20    | Violet                  |
+| 8    | 7           | PF8     | **D61**   | CN9 / pin 24    | Gray                    |
+| 9    | 3           | PF7     | **D62**   | CN9 / pin 26    | White                   |
+| 10   | 2           | PF9     | **D63**   | CN9 / pin 28    | Black                   |
+| 11   | VREFINT     | —       | —         | Internal only   | No header pin           | ~1.2V Internal Ref
 
 
 # Accelerometers
