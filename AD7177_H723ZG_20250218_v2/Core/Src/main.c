@@ -939,7 +939,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
@@ -997,9 +997,10 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   if (GPIO_Pin == GPIO_PIN_8 && g_init_done) {
     if (g_spi_inflight) return; // drop edge; SPI still busy
-    g_spi_inflight = true;
 
     NVIC_DisableIRQ(EXTI9_5_IRQn);
+    g_spi_inflight = true;
+
     HAL_StatusTypeDef rc = HAL_SPI_TransmitReceive_IT(&hspi1, g_txBuffer24bit_IT,
                                                       (uint8_t *)rxBuffer24bit, 5);
     if (rc != HAL_OK) {
