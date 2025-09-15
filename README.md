@@ -35,6 +35,20 @@ The 11 ADC Channels are sampled in the following rank/sequence:
 | 11   | VREFINT     | —       | —         | Internal only   | No header pin           | ~1.2V Internal Ref
 
 
+The EVAL-ADXL354BZ Accelerometer board now has a short DB9 pigtail attached, for connection with the EVAL-AD7177 ADC board with the following pinout:  
+
+| DB9 Pin | Function | EVAL-AD7177 Connection | EVAL-ADXL354BZ Connection      | Wire Colour |
+|---------|----------|-------------------------|--------------------------------|-------------|
+| 1       | 3.3V     | J9-3 IOVDD              | P1-1 VDDIO, P1-3 VDD           | Red         |
+| 2       | GND      | J8-8 GND                | P1-5 GND                       | Black       |
+| 3       | Accel X  | J8-2 A0                 | P1-2 Xout                      | Gray        |
+| 4       | Accel Y  | J8-3 A1                 | P1-4 Yout                      | Blue        |
+| 5       | Accel Z  | J8-4 A2                 | P1-6 Zout                      | Yellow      |
+| 6       | 1.8Vref  | A5 REF+                 | P2-1 V1P8ANA                   | Green       |
+| 7       | GND      | J8-8 GND                | P2-6 GND, P2-4 ST2, P2-2 ST1   | Black       |
+
+
+
 # Accelerometers
 
 
