@@ -35,7 +35,7 @@ The 11 ADC Channels are sampled in the following rank/sequence:
 | 11   | VREFINT     | —       | —         | Internal only   | No header pin           | ~1.2V Internal Ref
 
 
-The EVAL-ADXL354BZ Accelerometer board now has a short DB9 pigtail attached, for connection with the EVAL-AD7177 ADC board with the following pinout:  
+The EVAL-ADXL354BZ Accelerometer board now has a short DB9 male pigtail attached, for connection with the EVAL-AD7177 ADC board with the following pinout:  
 
 | DB9 Pin | Function | EVAL-AD7177 Connection | EVAL-ADXL354BZ Connection      | Wire Colour |
 |---------|----------|-------------------------|--------------------------------|-------------|
