@@ -36,13 +36,9 @@ NUM_FILES = -1  # Set to -1 for infinite, or specify the number of files
 BASE_PATH = str(Path("~/accel_hk_data").expanduser())  # Change this variable to set the base directory
 
 # Configuration
-#UDP_IP = "10.20.3.3"
-UDP_IP = "192.168.1.30" #Remote (MCU) IP
-#UDP_PORT = 8
-#LISTEN_IP = "10.20.1.3"
-LISTEN_IP = "192.168.1.10" #Host (This PC) IP
-LISTEN_PORT = 12345 #55151 #CHANGE IF ON SITE
-#PACKET_SIZE = 601*2 + 42  # 600 bytes of data + 42 bytes UDP header
+UDP_IP = "10.20.3.3" #Remote (MCU) IP
+LISTEN_IP = "10.20.1.3" #Host (This PC) IP
+LISTEN_PORT = 12345 
 PACKET_SIZE = 2048  # Maximum number of bytes to take from UDP packet
 
 SEPARATOR = b"\x89\xab\xcd\xef"
