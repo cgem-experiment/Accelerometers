@@ -1,7 +1,7 @@
 ﻿# Elab Notes in addition to below
 -Enabled internal 2.5Vref (measured 2.499V) buffer for internal ADC, R36 must be removed from nucleo board to disconnect Vref from VDD  
 -On AD7177-2 ADC Eval board, populate SL5-B to bring 3v3 to IOVDD header, for Accelerometer 3v3  
--Move Accelerometer GND to ADC board J6-8  
+-Move Accelerometer GND to ADC board J8-8  
 -Network/IP settings are now in /core/inc/net_config.h  
 -The Nucleo/MCU board is now wired to be powered from the same 7-9VDC as the ADC board, if flashing firmware without this power active (USB only), move jumper JP2 from VIN to STLINK.  
 -There is no longer a need to comment out any auto-generated CubeMX code when changing the .ioc  
